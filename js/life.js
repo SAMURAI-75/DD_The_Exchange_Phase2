@@ -50,7 +50,7 @@ class Life {
     renderer.overlay = (ctx) => this.draw(ctx);
   }
 
-  get theme() { return LIFE[this.planet.theme] || LIFE.earth; }
+  get theme() { return Object.prototype.hasOwnProperty.call(LIFE, this.planet.theme) ? LIFE[this.planet.theme] : LIFE.earth; } // [FIX B1]
 
   // ---------- creatures ----------
   _randomSpot() {

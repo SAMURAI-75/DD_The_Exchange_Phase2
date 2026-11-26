@@ -74,6 +74,15 @@
     return `${pick(ADJ)}-${pick(NOUN)}-${Math.floor(Math.random() * 1000)}`;
   }
 
+  // [FIX B2] Impact-winter cooling belongs to one planet/scenario. Undo it (fresh planet) or
+  // forget it (user picked a new temperature) so it can never leak or be re-applied later.
+  function undoWinter() {
+    if (!winterApplied) return;
+    setSlider(el.temp, Number(el.temp.value) + winterApplied);
+    winterApplied = 0; updateLabels();
+  }
+  function forgetWinter() { winterApplied = 0; }
+
   // ---------- generation ----------
   function generate() {
     const seed = normaliseSeed(el.seed.value);
@@ -91,7 +100,7 @@
         planet.generate(seed, rough);
         planet.classify(readClimate());
         if (life.game) life.stopGame(false);
-        dis.clear(); el.reportWrap.hidden = true; el.recover.disabled = true;
+        dis.clear(); el.reportWrap.hidden = true; el.recover.disabled = true; lastReport = null;
         life.populate(10);
         refreshInfo();
         writeHash();
@@ -123,9 +132,10 @@
       ['Forest', s.forest, '#3a7634'],
       ['Grass & savanna', s.grass, '#9aae4a'],
       ['Desert', s.desert, '#d8b26a'],
+      ['Beach', s.beach, '#decc92'], // [FIX B10] so the land/sea buckets add up to 100%
       ['Tundra', s.tundra, '#84927a'],
       ['Mountains', s.rock, '#76685a'],
-      ['Settled land', s.cities, '#ffc46e'],
+      ['Settled land (overlaps above)', s.cities, '#ffc46e'],
     ];
     const t = s.avgTemp;
     el.stats.innerHTML =
@@ -211,13 +221,14 @@
   function applyConfig(cfg) {
     if (!cfg || !cfg.seed) return false;
     stopTimelapse();
+    undoWinter();
     el.seed.value = cfg.seed;
     if (cfg.ocean !== undefined) setSlider(el.ocean, cfg.ocean);
-    if (cfg.temp !== undefined) setSlider(el.temp, cfg.temp);
+    if (cfg.temp !== undefined) { setSlider(el.temp, cfg.temp); forgetWinter(); }
     if (cfg.moist !== undefined) setSlider(el.moisture, cfg.moist);
     if (cfg.rough !== undefined) setSlider(el.rough, cfg.rough);
     if (cfg.tilt !== undefined) setSlider(el.axial, cfg.tilt);
-    if (cfg.theme && THEMES[cfg.theme]) setTheme(cfg.theme, true);
+    if (isTheme(cfg.theme)) setTheme(cfg.theme, true); // [FIX B1]
     if (cfg.melt === '0' || cfg.melt === '1') el.melt.checked = cfg.melt === '1';
     updateLabels();
     generate();
@@ -249,7 +260,7 @@
     b.type = 'button';
     b.textContent = p.name;
     b.addEventListener('click', () => {
-      stopTimelapse();
+      stopTimelapse(); forgetWinter(); // [FIX B2] preset sets its own temperature
       setSlider(el.ocean, p.ocean); setSlider(el.temp, p.temp); setSlider(el.moisture, p.moist);
       updateLabels();
       state.needClassify = true;
@@ -258,6 +269,7 @@
   }
 
   function startTimelapse() {
+    forgetWinter(); // [FIX B2] the time-lapse drives temperature itself
     state.timelapse = { start: performance.now(), from: -25, to: 25, duration: 12000 };
     el.timelapse.textContent = '⏹ Stop time-lapse';
     el.timelapse.classList.add('active');
@@ -270,13 +282,13 @@
   }
 
   // ---------- events ----------
-  el.seedForm.addEventListener('submit', (e) => { e.preventDefault(); generate(); });
-  el.randomSeed.addEventListener('click', () => { el.seed.value = randomSeed(); generate(); });
+  el.seedForm.addEventListener('submit', (e) => { e.preventDefault(); undoWinter(); generate(); });
+  el.randomSeed.addEventListener('click', () => { undoWinter(); el.seed.value = randomSeed(); generate(); });
 
   for (const input of [el.ocean, el.moisture]) {
     input.addEventListener('input', () => { updateLabels(); state.needClassify = true; });
   }
-  el.temp.addEventListener('input', () => { stopTimelapse(); updateLabels(); state.needClassify = true; });
+  el.temp.addEventListener('input', () => { stopTimelapse(); forgetWinter(); updateLabels(); state.needClassify = true; });
   el.melt.addEventListener('change', () => { state.needClassify = true; });
   el.rough.addEventListener('input', updateLabels);
   el.axial.addEventListener('input', () => { updateLabels(); writeHash(); });
@@ -285,6 +297,7 @@
   el.timelapse.addEventListener('click', () => (state.timelapse ? stopTimelapse() : startTimelapse()));
 
   function setView(mode) {
+    if (life.game && mode === 'map') { flash('The game is played on the globe. Quit the game to use the map.'); return; } // [FIX B4]
     renderer.setMode(mode);
     el.viewGlobe.classList.toggle('on', mode === 'globe');
     el.viewMap.classList.toggle('on', mode === 'map');
@@ -297,6 +310,8 @@
   function togglePause() {
     state.paused = !state.paused;
     el.pause.textContent = state.paused ? '▶ Play' : '⏸ Pause';
+    // [FIX B13] make a paused game obvious
+    if (life.game) { if (state.paused) { clearTimeout(msgTimer); el.gameMsg.innerHTML = '⏸ <b>Paused</b><br>Space or ▶ Play to resume'; el.gameMsg.hidden = false; } else el.gameMsg.hidden = true; }
   }
   el.pause.addEventListener('click', togglePause);
   el.clouds.addEventListener('change', () => { view.clouds = el.clouds.checked; });
@@ -343,12 +358,19 @@
     const r = canvas.getBoundingClientRect();
     return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
   }
+  // [FIX B17] two-finger pinch zoom on touch screens
+  const touches = new Map(); let pinch = null;
+  const pinchDist = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    canvas.setPointerCapture(e.pointerId);
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* [FIX B15] pointer already gone */ }
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size === 2 && renderer.mode === 'globe') { pinch = { d0: pinchDist(), z0: renderer.zoom }; state.drag = null; return; }
     state.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && touches.size === 2) { renderer.setZoom(pinch.z0 * pinchDist() / pinch.d0); return; }
     const d = state.drag;
     if (!d || d.id !== e.pointerId) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
@@ -361,6 +383,8 @@
     }
   });
   function endDrag(e) {
+    touches.delete(e.pointerId);
+    if (pinch) { if (touches.size < 2) pinch = null; state.drag = null; return; }
     const d = state.drag;
     if (!d || d.id !== e.pointerId) return;
     state.drag = null;
@@ -368,7 +392,7 @@
     if (e.type === 'pointerup' && d.moved <= 4) {
       const p = toCanvas(e);
       const hit = renderer.pick(p.x, p.y, view);
-      if (hit && armedKey) { doStrike(hit); return; }
+      if (hit && armedKey && !life.game) { doStrike(hit); return; } // [FIX B3]
       state.inspected = hit;
       renderer.marker = hit;
       if (hit) { Sfx.inspect(); refreshInspect(); }
@@ -383,6 +407,7 @@
     if (life.game) {
       if (KEYMAP[e.code]) { e.preventDefault(); life.keys.add(KEYMAP[e.code]); return; }
       if (e.code === 'Escape') { life.stopGame(false); return; }
+      if (e.code === 'Space') { e.preventDefault(); togglePause(); return; } // [FIX B13]
     }
   }, true);
   document.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) life.keys.delete(KEYMAP[e.code]); });
@@ -404,6 +429,7 @@
     if (!planet.seed) return;
     stopTimelapse();
     setView('globe');
+    if (armedKey) { armedKey = null; syncDisasterUI(); } // [FIX B3]
     if (state.paused) togglePause();
     renderer.setZoom(Math.max(renderer.zoom, 1.4));
     life.startGame();
@@ -430,7 +456,7 @@
   document.addEventListener('keydown', (e) => {
     if (life.game) return;
     const tag = (e.target && e.target.tagName) || '';
-    if (tag === 'INPUT' && e.target.type === 'text') return;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return; // [FIX B6] sliders/checkboxes too
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.code === 'Space') { e.preventDefault(); togglePause(); }
     else if (e.key === 'r' || e.key === 'R') { el.seed.value = randomSeed(); generate(); }
@@ -453,9 +479,10 @@
       state.needClassify = true;
       if (k >= 1) stopTimelapse();
     }
+    try { // [FIX B1] one bad frame must never stop the animation loop
     if (state.needClassify) { state.needClassify = false; reclassify(); }
     life.update(state.paused ? 0 : dt);
-    const prog = dis.update(dt);
+    const prog = dis.update(state.paused ? 0 : dt); // [FIX B12]
     if (prog && lastReport) { el.report.innerHTML = disasterReportHTML(lastReport, prog); if (prog.done) onRecovered(); }
 
     if (!state.paused) {
@@ -477,6 +504,7 @@
 
     // keep the inspector's day/night line in sync, cheaply
     if (state.inspected && now - inspectTimer > 500) { inspectTimer = now; refreshInspect(); }
+    } catch (err) { console.error(err); }
     requestAnimationFrame(frame);
   }
 
@@ -509,14 +537,19 @@
 
   // ---------- world themes ----------
   function setTheme(name, quiet) {
-    if (!THEMES[name]) return;
+    if (!isTheme(name)) return; // [FIX B1]
     planet.theme = name;
+    if (name !== 'earth') { // [FIX B9] disasters are Earth-only: clear scars, report and arming
+      dis.clear(); lastReport = null; el.reportWrap.hidden = true; el.recover.disabled = true;
+      undoWinter();
+      if (armedKey) { armedKey = null; syncDisasterUI(); }
+    }
     [...el.themes.children].forEach((b) => {
       const on = b.dataset.theme === name;
       b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
     });
     buildLegend();
-    if (!quiet) { Sfx.theme(name); state.needClassify = true; if (planet.seed && !life.game) life.populate(10); }
+    if (!quiet) { Sfx.theme(name); state.needClassify = true; if (planet.seed) life.populate(life.game ? 16 : 10); } // [FIX B14]
   }
   for (const [key, t] of Object.entries(THEMES)) {
     const b = document.createElement('button');
@@ -620,13 +653,14 @@
     }
     el.reportWrap.hidden = false;
     el.report.innerHTML = disasterReportHTML(rep, null);
-    el.recover.disabled = false;
+    el.recover.disabled = !!rep.noEffect || !dis.damage.some((x) => x > 0); // [FIX B8]
     state.inspected = hit; renderer.marker = hit; refreshInspect();
     Sfx.disaster(rep.key);
   }
   el.recover.addEventListener('click', () => {
     if (!lastReport || dis.recovering) return;
     if (dis.startRecovery(lastReport.recovery[1])) el.recover.disabled = true;
+    else { el.recover.disabled = true; flash('Nothing to recover: that disaster left no damage.'); } // [FIX B8]
   });
   function onRecovered() {
     if (winterApplied) { setSlider(el.temp, Number(el.temp.value) + winterApplied); winterApplied = 0; updateLabels(); state.needClassify = true; }

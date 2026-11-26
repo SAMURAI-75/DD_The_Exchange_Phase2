@@ -54,36 +54,51 @@ class Renderer {
     const S = GLOBE_SIZE, R = S * 0.42 * this.zoom, cx = S / 2, cy = S / 2;
     this.R = R; this.cx = cx; this.cy = cy;
     const ct = Math.cos(this.tilt), st = Math.sin(this.tilt);
-    const idx = [], row = [], lon0 = [], cosL = [], sinL = [], limb = [];
-    const gIdx = [], gA = [];
-    for (let py = 0; py < S; py++) {
-      for (let px = 0; px < S; px++) {
-        const x = (px + 0.5 - cx) / R, y = -(py + 0.5 - cy) / R;
-        const d2 = x * x + y * y;
+    // [FIX B5] reuse preallocated typed arrays instead of growing 8 JS arrays (~360k push() each rebuild)
+    const N = S * S;
+    if (!this._pool) this._pool = {
+      idx: new Int32Array(N), row: new Int32Array(N), lon0: new Float32Array(N), cosL: new Float32Array(N),
+      sinL: new Float32Array(N), limb: new Float32Array(N), gIdx: new Int32Array(N), gA: new Float32Array(N),
+    };
+    const pl = this._pool;
+    let n = 0, gn = 0;
+    // only scan the square that can contain the globe + glow ring
+    const ext = Math.ceil(R * 1.09) + 1;
+    const x0 = Math.max(0, Math.floor(cx - ext)), x1 = Math.min(S, Math.ceil(cx + ext));
+    const y0 = Math.max(0, Math.floor(cy - ext)), y1 = Math.min(S, Math.ceil(cy + ext));
+    const invR = 1 / R, PIinv = 1 / Math.PI;
+    for (let py = y0; py < y1; py++) {
+      const y = -(py + 0.5 - cy) * invR, yy = y * y;
+      for (let px = x0; px < x1; px++) {
+        const x = (px + 0.5 - cx) * invR;
+        const d2 = x * x + yy;
         if (d2 <= 1) {
           const z = Math.sqrt(1 - d2);
           // un-tilt view vector into planet frame
-          const y2 = y * ct + z * st;
+          let y2 = y * ct + z * st;
+          if (y2 > 1) y2 = 1; else if (y2 < -1) y2 = -1;
           const z2 = -y * st + z * ct;
-          const lat = Math.asin(Math.max(-1, Math.min(1, y2)));
-          idx.push(py * S + px);
-          row.push(Math.min(MAP_H - 1, Math.max(0, Math.floor((0.5 - lat / Math.PI) * MAP_H))));
-          lon0.push(Math.atan2(x, z2));
-          cosL.push(Math.cos(lat)); sinL.push(Math.sin(lat));
-          limb.push(0.55 + 0.45 * z);
-        } else {
-          const d = Math.sqrt(d2);
-          if (d < 1.09) {
-            gIdx.push(py * S + px);
-            gA.push(Math.pow(1 - (d - 1) / 0.09, 2) * 0.75);
-          }
+          const cosLat = Math.sqrt(1 - y2 * y2);               // cos(asin(y2)) without asin
+          const lat = Math.asin(y2);
+          let r = Math.floor((0.5 - lat * PIinv) * MAP_H);
+          pl.idx[n] = py * S + px;
+          pl.row[n] = r < 0 ? 0 : r > MAP_H - 1 ? MAP_H - 1 : r;
+          pl.lon0[n] = Math.atan2(x, z2);
+          pl.cosL[n] = cosLat; pl.sinL[n] = y2;
+          pl.limb[n] = 0.55 + 0.45 * z;
+          n++;
+        } else if (d2 < 1.1881) { // 1.09^2
+          const d = Math.sqrt(d2), q = 1 - (d - 1) / 0.09;
+          pl.gIdx[gn] = py * S + px;
+          pl.gA[gn] = q * q * 0.75;
+          gn++;
         }
       }
     }
     this.gt = {
-      idx: Int32Array.from(idx), row: Int32Array.from(row), lon0: Float32Array.from(lon0),
-      cosL: Float32Array.from(cosL), sinL: Float32Array.from(sinL), limb: Float32Array.from(limb),
-      gIdx: Int32Array.from(gIdx), gA: Float32Array.from(gA),
+      idx: pl.idx.subarray(0, n), row: pl.row.subarray(0, n), lon0: pl.lon0.subarray(0, n),
+      cosL: pl.cosL.subarray(0, n), sinL: pl.sinL.subarray(0, n), limb: pl.limb.subarray(0, n),
+      gIdx: pl.gIdx.subarray(0, gn), gA: pl.gA.subarray(0, gn),
     };
     this.tableTilt = this.tilt;
     this.tableZoom = this.zoom;

@@ -67,6 +67,8 @@ const THEMES = {
 };
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+// [FIX B1] only real themes count: THEMES['constructor'] / ['__proto__'] are inherited, not themes.
+const isTheme = (name) => typeof name === 'string' && Object.prototype.hasOwnProperty.call(THEMES, name);
 
 // Sanitise any user-provided seed into a non-empty, bounded string.
 function normaliseSeed(seed) {
@@ -128,7 +130,7 @@ class Planet {
     this.theme = 'earth';
   }
 
-  get palette() { return THEMES[this.theme] || THEMES.earth; }
+  get palette() { return isTheme(this.theme) ? THEMES[this.theme] : THEMES.earth; }
 
   generate(seed, roughness) {
     const s = normaliseSeed(seed);
@@ -265,7 +267,7 @@ class Planet {
     const oceanFrac = this.effectiveOcean(this.climate);
     this.seaLevel = this.quantile(oceanFrac);
 
-    const st = { ocean: 0, ice: 0, desert: 0, forest: 0, grass: 0, tundra: 0, rock: 0, habitable: 0, temp: 0, total: 0, cities: 0, pop: 0 };
+    const st = { ocean: 0, ice: 0, desert: 0, forest: 0, rain: 0, grass: 0, tundra: 0, rock: 0, beach: 0, habitable: 0, temp: 0, total: 0, cities: 0, pop: 0 };
     const { R, G, Bc, biome, city, elev } = this;
     const TH = this.palette, SHALLOW_RGB = TH.shallow, DEEP_RGB = TH.deep;
 
@@ -306,10 +308,11 @@ class Planet {
 
         st.total += w;
         st.temp += s.T * w;
-        if (!s.land) st.ocean += w;
+        if (!s.land && b !== B.SEA_ICE) st.ocean += w; // [FIX B10] sea ice is counted once, under ice
         if (b === B.SEA_ICE || b === B.SNOW) st.ice += w;
+        else if (b === B.BEACH) st.beach += w;            // [FIX B10] beaches were not counted at all
         else if (b === B.DESERT) st.desert += w;
-        else if (b === B.FOREST || b === B.RAINFOREST) st.forest += w;
+        else if (b === B.FOREST || b === B.RAINFOREST) { st.forest += w; if (b === B.RAINFOREST) st.rain += w; }
         else if (b === B.GRASS || b === B.SAVANNA) st.grass += w;
         else if (b === B.TUNDRA) st.tundra += w;
         else if (b === B.ROCK) st.rock += w;
@@ -320,7 +323,7 @@ class Planet {
     const T = st.total;
     this.stats = {
       ocean: st.ocean / T, ice: st.ice / T, desert: st.desert / T, forest: st.forest / T,
-      grass: st.grass / T, tundra: st.tundra / T, rock: st.rock / T,
+      grass: st.grass / T, tundra: st.tundra / T, rock: st.rock / T, beach: st.beach / T, rainforest: st.rain / T,
       habitable: st.habitable / T, avgTemp: st.temp / T, cities: st.cities / T,
       oceanTarget: oceanFrac,
       population: st.pop * this.popK,
@@ -354,7 +357,8 @@ class Planet {
     if (s.ice > 0.55) return 'Ice World';
     if (s.ocean > 0.88) return 'Ocean World';
     if (s.desert > 0.3) return 'Desert World';
-    if (s.forest > 0.25) return 'Jungle World';
+    if (s.rainforest > 0.15) return 'Jungle World';   // [FIX B11] only real rainforest makes a jungle
+    if (s.forest > 0.25) return 'Forest World';
     if (s.ocean < 0.25) return 'Barren Continent';
     if (s.habitable > 0.15) return 'Garden World';
     return 'Temperate World';

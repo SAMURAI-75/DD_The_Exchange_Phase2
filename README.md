@@ -45,13 +45,6 @@ and visit http://localhost:8000
 
 A planet generator that builds miniature worlds from a seed. You can see each planet as a rotating 3D globe or a flat 2D map, watch day and night sweep across it, and reshape its climate live.
 
-## Run it
-
-No install, no build, no internet, no API keys.
-
-1. Open `index.html` in any modern browser (Chrome, Edge, Firefox), **or**
-2. Serve the folder: `python -m http.server 8000`, then open <http://localhost:8000>
-
 ## Features
 
 ### Required by the brief

@@ -88,11 +88,10 @@ function fmtNum(n) {
   if (!Number.isFinite(n) || n < 1) return '0';
   if (n >= 1e9) return (n / 1e9).toFixed(2) + ' billion';
   if (n >= 1e6) return (n / 1e6).toFixed(1) + ' million';
-  if (n >= 1e3) return Math.round(n / 1e3).toLocaleString() + ',000';
-  return Math.round(n).toLocaleString();
+  return Math.round(n).toLocaleString('en-US'); // [FIX B16] one locale, no mixed separators
 }
 function fmtYears([a, b]) {
-  const f = (y) => (y >= 1e6 ? (y / 1e6).toFixed(0) + ' million' : y.toLocaleString());
+  const f = (y) => (y >= 1e6 ? (y / 1e6).toFixed(0) + ' million' : y.toLocaleString('en-US'));
   return `${f(a)}–${f(b)} years`;
 }
 
@@ -127,7 +126,7 @@ class Disasters {
 
     // Only scan rows that can be inside the radius.
     const dRow = Math.ceil((ang / Math.PI) * MAP_H) + 1;
-    let deaths = 0, affectedPop = 0, area = 0, animals = 0;
+    let deaths = 0, affectedPop = 0, area = 0, animals = 0, hits = 0;
     const habitats = new Set();
     for (let y = Math.max(0, row - dRow); y <= Math.min(MAP_H - 1, row + dRow); y++) {
       const cl = P.cosLat[y], sl = P.sinLat[y];
@@ -140,6 +139,7 @@ class Disasters {
         const s = P.sample(i, y);
         const b = P.biome[i];
         if (!D.affects(s, b)) continue;
+        hits++;
         const d = dist / ang;
         const w = cl;
         const pop = P.popD[i] * w * P.popK;
@@ -188,14 +188,19 @@ class Disasters {
       animals, species: species.slice(0, 8), creaturesLost,
       env: D.env(v, ocean0), coolC, coolYears, globalDeaths, worldPop: world, recovery: rec,
       place: P.describe(row, col),
+      noEffect: hits === 0, // [FIX B7] e.g. a wildfire or earthquake on open ocean
     };
+    if (report.noEffect) {
+      report.env = [{ quake: 'Earthquakes here only affect land: this spot is open sea.', tsunami: 'Tsunamis only reach seas and low coasts: this spot is too high inland.', wildfire: 'Wildfires need forest or grassland: nothing here can burn.' }[key] || 'Nothing here was affected.'];
+      report.recovery = [0, 0];
+    }
     this.log.push(report);
     return report;
   }
 
   startRecovery(years) {
     if (!this.damage.some((x) => x > 0)) return false;
-    this.recovering = { start: performance.now(), duration: 8000, years, from: this.damage.slice() };
+    this.recovering = { elapsed: 0, duration: 8, years, from: this.damage.slice() }; // [FIX B12] seconds of un-paused time
     return true;
   }
 
@@ -205,7 +210,8 @@ class Disasters {
     this.effects = this.effects.filter((e) => e.t < e.dur);
     const r = this.recovering;
     if (!r) return null;
-    const k = Math.min(1, (performance.now() - r.start) / r.duration);
+    r.elapsed += dt;
+    const k = Math.min(1, r.elapsed / r.duration);
     const keep = 1 - k;
     for (let i = 0; i < this.damage.length; i++) if (r.from[i]) this.damage[i] = r.from[i] * keep;
     if (k >= 1) { this.recovering = null; this.damage.fill(0); this.life.populate(10); }
@@ -254,7 +260,7 @@ function disasterReportHTML(r, progress) {
   const pct = r.worldPop > 0 ? (r.deaths / r.worldPop) * 100 : 0;
   return `
     <div class="rep-head"><b>${r.label}</b> · ${r.magnitude}</div>
-    <div class="muted small">${Math.abs(r.place.lat).toFixed(1)}°${ns}, ${Math.abs(r.place.lon).toFixed(1)}°${ew} · ${r.place.biome} · radius ${Math.round(r.radiusKm).toLocaleString()} km</div>
+    <div class="muted small">${Math.abs(r.place.lat).toFixed(1)}°${ns}, ${Math.abs(r.place.lon).toFixed(1)}°${ew} · ${r.place.biome} · radius ${Math.round(r.radiusKm).toLocaleString('en-US')} km</div>
     <div class="kpis rep-kpis">
       <div class="kpi"><div class="v red">${fmtNum(r.deaths)}</div><div class="k">deaths (${pct < 0.01 && r.deaths > 0 ? '<0.01' : pct.toFixed(2)}% of world)</div></div>
       <div class="kpi"><div class="v">${fmtNum(r.displaced)}</div><div class="k">displaced</div></div>
@@ -264,8 +270,8 @@ function disasterReportHTML(r, progress) {
     <div class="small"><b>Animals affected:</b> ~${fmtNum(r.animals)} ${r.species.join(' ')}</div>
     <ul class="small env">${r.env.map((t) => `<li>${t}</li>`).join('')}</ul>
     ${glob}
-    <div class="small"><b>Recovery:</b> ${fmtYears(r.recovery)}</div>
+    ${r.noEffect ? '<p class="warn">No effect here. Nothing in range could be hit by this disaster.</p>' : `<div class="small"><b>Recovery:</b> ${fmtYears(r.recovery)}</div>`}
     ${progress ? `<div class="bar rec"><i style="width:${(progress.k * 100).toFixed(0)}%;background:#5fd38a"></i></div>
-      <div class="small muted">${progress.done ? '✅ Recovered' : `Year ${progress.year.toLocaleString()} of ~${r.recovery[1].toLocaleString()}`}</div>` : ''}
+      <div class="small muted">${progress.done ? '✅ Recovered' : `Year ${progress.year.toLocaleString('en-US')} of ~${r.recovery[1].toLocaleString('en-US')}`}</div>` : ''}
     <p class="small muted">Estimates use simplified models for illustration.</p>`;
 }
