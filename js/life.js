@@ -154,7 +154,7 @@ class Life {
 
   // ---------- overlay drawing on the planet canvas ----------
   draw(ctx) {
-    if (!this.planet.seed) return;
+    if (!this.planet.seed || this.hidden) return; // [FIX] no creatures floating where the planet used to be
     const t = performance.now() / 1000;
     const big = !!this.game;
     ctx.save();

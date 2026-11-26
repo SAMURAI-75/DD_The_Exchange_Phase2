@@ -112,7 +112,7 @@ js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 
 - **18 bugs fixed** (bug report on the original version with screenshots: `Phase2_Report/Phase2_Bug_Report_Original.docx`; fixes and re-tests: `Phase2_Report/Phase2_Fixes_and_Retests.docx`), including a share link that crashed the whole app.
 - **New look:** Apple-style frosted-glass panels floating over a full-screen starfield; sharper globe with ocean glint and atmosphere; a real sun (corona, rays, lens flare, eclipse halo).
-- **🌍 Real Earth:** one click loads Earth with hand-drawn coastlines, 56 countries (borders, flags, governments) and 90 real cities with lights. Search any country or city (e.g. *Bangalore*): the globe flies there and a card shows weather, population, how people feel, public approval, economy, crops, fresh water, wars and public opinion of other nations.
+- **🌍 Real Earth:** one click loads the real planet: NASA Blue Marble satellite imagery, NASA Black Marble night lights, real elevation (mountains are cold), and all 177 Natural Earth countries with real borders, populations and income levels, plus ~130 major cities. Search any country or city (e.g. *Bangalore*): the globe flies there and a card shows weather, population, how people feel, public approval, economy, crops, fresh water, wars and public opinion of other nations, seeded from real alliances (NATO, EU, CSTO, US partners, the Russia–China axis) and real rivalries (India–Pakistan, the two Koreas, Saudi Arabia–Iran, Russia–Ukraine, …). Disputed territories are labelled as disputed.
 - **Nations everywhere:** generated planets get their own named nations.
 - **⚔️ War:** pick two nations. Fronts burn, casualties mount, governments get a rally then war-weariness. Every other nation takes a stance (neutral, backs a side, or joins the fight) based on alliances, neighbours and opinion, and you can change any country's stance from its card.
 - **🧪 Pandemic lab:** design a pathogen (type, R₀, lethality, cure difficulty, air/land/water spread), release it anywhere and watch it spread while countries respond with masks, lockdowns and vaccines.
@@ -120,3 +120,8 @@ js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 - **☄️ End of the world:** meteor storm, planet collision, the sun going supernova, or a black hole.
 - **Close-ups:** the landscape view shows what is happening at a spot: war zones, outbreaks, floods, fires, ruins, drought, doom.
 - Candy and Alien themes removed.
+
+### Data credits
+- Satellite imagery: NASA Earth Observatory, Blue Marble and Black Marble (public domain), via the three-globe example images.
+- Country borders, populations, income groups: Natural Earth 1:110m Admin 0 (public domain).
+All of it is bundled in `js/earth-data.js` and `js/earth-tex.js`, so the project still runs offline with no server.

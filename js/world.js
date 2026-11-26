@@ -3,11 +3,6 @@
 // wars, pandemics, human impact over time, and planet-ending cataclysms.
 'use strict';
 
-// Rough alliance blocs for the real Earth (everyone else starts non-aligned)
-const EARTH_BLOCS = {
-  west: ['United States', 'Canada', 'United Kingdom', 'France', 'Germany', 'Italy', 'Spain', 'Poland', 'Norway', 'Sweden', 'Finland', 'Iceland', 'Ireland', 'Japan', 'South Korea', 'Australia', 'New Zealand', 'Taiwan', 'Ukraine', 'Greenland', 'Turkey'],
-  east: ['Russia', 'China', 'North Korea', 'Iran', 'Cuba', 'Venezuela'],
-};
 const STANCE_LABEL = { '-2': 'Fighting alongside', '-1': 'Backing', '0': 'Neutral', '1': 'Backing', '2': 'Fighting alongside' };
 const GOVS = ['Parliamentary republic', 'Presidential republic', 'Constitutional monarchy', 'Federation', 'One-party state', 'Military junta', 'Theocracy', 'Direct democracy'];
 const NATION_SYL = ['ar', 'bel', 'cor', 'dan', 'el', 'fen', 'gar', 'hal', 'is', 'jor', 'kal', 'lor', 'mar', 'nor', 'os', 'pel', 'quin', 'ros', 'sal', 'tor', 'ul', 'var', 'wen', 'zan'];
@@ -51,14 +46,14 @@ class World {
     this.regions = [];
     const lonOf = (x) => ((x + 0.5) / MAP_W - 0.5) * 360;
     if (P.isEarth) {
-      COUNTRIES.forEach((c, id) => this.regions.push(regionRecord(id, { name: c.name, flag: c.flag, gov: c.gov, econ0: c.econ, real: true, realPop: c.pop * 1e6 })));
+      COUNTRY_DATA.forEach((c, id) => this.regions.push(regionRecord(id, { name: c.name, a3: c.a3, flag: flagOf(c.iso2), gov: GOV_BY_A3[c.a3] || '', disputed: DISPUTED[c.a3] || '', econ0: c.econ, real: true, realPop: c.pop, cont: c.cont, sub: c.sub, polys: c.polys })));
       for (let y = 0; y < MAP_H; y++) {
         const lat = P.latRad[y] * 57.29578;
         for (let x = 0; x < MAP_W; x++) { const id = EARTH.countryAt(lonOf(x), lat); if (id >= 0) this.region[y * MAP_W + x] = id; }
       }
-      for (const [name, country, lon, lat, popM] of CITIES) {
-        const r = this.regions.find((q) => q.name === country);
-        if (r) r.cities.push({ name, lon, lat, pop: popM * 1e6 });
+      for (const [name, a3, lon, lat, popM] of CITIES) {
+        const id = EARTH.byA3.get(a3);
+        if (id !== undefined) this.regions[id].cities.push({ name, lon, lat, pop: popM * 1e6 });
       }
     } else {
       const rng = mulberry32(hashString('nations:' + P.seed));
@@ -93,15 +88,29 @@ class World {
       for (const j of [j1, j2]) { const b = this.region[j]; if (b !== 255 && b !== a) { this.border[i] = 1; this.adj[a][b]++; this.adj[b][a]++; } }
     }
     // initial views of other nations: mild, neighbours slightly warmer or cooler
-    this.regions.forEach((r, k) => {
-      if (r.real) r.bloc = EARTH_BLOCS.west.includes(r.name) ? 'west' : EARTH_BLOCS.east.includes(r.name) ? 'east' : null;
+    this.regions.forEach((r) => {
+      if (r.real) r.bloc = BLOC_WEST.has(r.a3) ? 'west' : BLOC_EAST.has(r.a3) ? 'east' : null;
       else r.bloc = /one-party|junta|theocracy/i.test(r.gov) ? 'east' : /republic|democracy|monarchy/i.test(r.gov) && (hashString(r.name) % 3 !== 0) ? 'west' : null;
     });
+    // [FEATURE] public opinion seeded from real alliances and rivalries (Earth) or from blocs (generated worlds)
+    const groupsOf = (a3) => Object.entries(ALLIANCES).filter(([, l]) => l.includes(a3)).map(([g]) => g);
+    const rel = new Map(); if (P.isEarth) for (const [x, y, v] of RELATIONS) { rel.set(x + y, v); rel.set(y + x, v); }
     this.views = Array.from({ length: R }, (_, a) => Float32Array.from({ length: R }, (_, b) => {
       if (a === b) return 100;
       const A = this.regions[a], Bq = this.regions[b];
-      let v = 10 + ((hashString(a + ':' + b) % 30) - 10);
-      if (A.bloc && A.bloc === Bq.bloc) v += 40; else if (A.bloc && Bq.bloc) v -= 30;
+      let v = 5 + ((hashString(a + ':' + b) % 5) - 2);              // mild, near-neutral by default
+      if (this.adj[a][b] > 0) v += 5;                                  // neighbours trade and talk
+      if (A.real) {
+        if (A.cont === Bq.cont) v += 3;
+        const ga = groupsOf(A.a3), gb = new Set(groupsOf(Bq.a3)), shared = ga.filter((g) => gb.has(g) && g !== 'AXIS');
+        v += Math.min(45, shared.length * 22);
+        if (ga.includes('AXIS') && gb.has('AXIS')) v += 30;
+        if ((BLOC_WEST.has(A.a3) && BLOC_EAST.has(Bq.a3)) || (BLOC_EAST.has(A.a3) && BLOC_WEST.has(Bq.a3))) v -= 25;
+        if (rel.has(A.a3 + Bq.a3)) v = rel.get(A.a3 + Bq.a3);         // known real relationship wins
+      } else {
+        if (A.bloc && A.bloc === Bq.bloc) v += 35; else if (A.bloc && Bq.bloc) v -= 25;
+        v += (hashString(A.name + Bq.name) % 21) - 10;
+      }
       return v;
     }));
     this.refreshStats(true);
@@ -173,7 +182,7 @@ class World {
     const r = this.regions[a]; if (!r) return null;
     let lo = 999, hi = -999, loI = -1, hiI = -1;
     this.views[a].forEach((v, b) => { if (b === a || this.regions[b].pop < 1) return; if (v < lo) { lo = v; loI = b; } if (v > hi) { hi = v; hiI = b; } });
-    return { hostile: loI >= 0 ? this.regions[loI] : null, hostileV: lo, friend: hiI >= 0 ? this.regions[hiI] : null, friendV: hi };
+    return { hostile: loI >= 0 && lo <= -15 ? this.regions[loI] : null, hostileV: lo, friend: hiI >= 0 && hi >= 30 ? this.regions[hiI] : null, friendV: hi };
   }
 
   // ---------- war ----------
@@ -316,7 +325,7 @@ class World {
     for (const e of this.events) e.t += dt;
     this.events = this.events.filter((e) => e.t < 4);
     this._updateDoom(dt);
-    if (years > 0 && !this.vanished) this._simulate(years);
+    if (years > 0 && !this.vanished && !(this.doom && this.doom.applied) && this.worldPop > 1) this._simulate(years); // [FIX] time stops when no one is left
     // war fronts flicker down slowly when the war ends
     if (this.wars.length === 0 && years > 0) for (let i = 0; i < this.front.length; i++) if (this.front[i] > 0) this.front[i] = Math.max(0, this.front[i] - years * 0.2);
     // per-region overlay tint (pandemic red, cataclysm handled per pixel)
@@ -334,7 +343,7 @@ class World {
     const P = this.planet, k = years * 0.012 * Math.min(3, this.worldPop / 8e9 + 0.2);
     for (let i = 0; i < this.foot.length; i++) {
       const d = P.popD[i]; if (d <= 0) continue;
-      this.foot[i] = Math.min(1, this.foot[i] + k * (d * 3 + 0.15));
+      this.foot[i] = Math.min(1, this.foot[i] + k * d * 2); // [FIX] only where people actually live
     }
   }
 
@@ -342,7 +351,8 @@ class World {
     this.year += dt;
     const pop = this.worldPop;
     // climate change driven by population (illustrative): warming, drying lakes, extinctions
-    this.warming += dt * 0.022 * (pop / 8e9);
+    // warming slows as fossil fuels run out and emissions fall (illustrative), capped at +8 °C
+    this.warming = Math.min(8, this.warming + dt * 0.022 * (pop / 8e9) * Math.max(0.05, 1 - this.warming / 8));
     this.drying = Math.min(0.35, this.warming * 0.012);
     this.wildlife = Math.max(0, this.wildlife - dt * (0.12 * (pop / 8e9) + this.wars.length * 0.4 + this.warming * 0.05));
     this.speciesLost = Math.round(8.7e6 * (1 - this.wildlife / 100) * 0.12);
@@ -444,13 +454,13 @@ class World {
     const land = P.elev[i] >= P.seaLevel;
     if (land) {
       const ft = this.foot[i];
-      if (ft > 0.02) { const k = Math.min(0.55, ft * 0.6); rgb[0] = rgb[0] * (1 - k) + 150 * f * k; rgb[1] = rgb[1] * (1 - k) + 128 * f * k; rgb[2] = rgb[2] * (1 - k) + 84 * f * k; }
+      if (ft > 0.05) { const k = Math.min(0.22, ft * 0.25); rgb[0] = rgb[0] * (1 - k) + 140 * f * k; rgb[1] = rgb[1] * (1 - k) + 122 * f * k; rgb[2] = rgb[2] * (1 - k) + 86 * f * k; } // [FIX] subtle farmland tint
       const reg = this.region[i];
       if (reg !== 255) {
         const ta = this.tA[reg];
         if (ta > 0) { rgb[0] = rgb[0] * (1 - ta) + this.tR[reg] * (0.35 + 0.65 * f) * ta; rgb[1] = rgb[1] * (1 - ta) + this.tG[reg] * f * ta; rgb[2] = rgb[2] * (1 - ta) + this.tB[reg] * f * ta; }
         if (reg === this.sel) { rgb[0] += 34 * f + 10; rgb[1] += 34 * f + 10; rgb[2] += 44 * f + 14; }
-        if (this.border[i]) { const k = reg === this.sel ? 0.85 : 0.45; rgb[0] = rgb[0] * (1 - k) + 255 * k * (0.35 + 0.65 * f); rgb[1] = rgb[1] * (1 - k) + 255 * k * (0.35 + 0.65 * f); rgb[2] = rgb[2] * (1 - k) + 255 * k * (0.35 + 0.65 * f); }
+        if (this.border[i] && !P.isEarth) { const k = reg === this.sel ? 0.85 : 0.45; rgb[0] = rgb[0] * (1 - k) + 255 * k * (0.35 + 0.65 * f); rgb[1] = rgb[1] * (1 - k) + 255 * k * (0.35 + 0.65 * f); rgb[2] = rgb[2] * (1 - k) + 255 * k * (0.35 + 0.65 * f); }
       }
       const fr = this.front[i];
       if (fr > 0) { const fl = fr * (0.55 + 0.45 * Math.sin(i * 7.31 + performance.now() / 120)); rgb[0] += 230 * fl; rgb[1] += 70 * fl; rgb[2] = rgb[2] * (1 - fl * 0.6); }
@@ -463,6 +473,7 @@ class World {
     const t = performance.now() / 1000;
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const ll = (lon, lat) => project(Math.floor((0.5 - lat / 180) * MAP_H), Math.floor((lon / 360 + 0.5) * MAP_W));
+    if (this.planet.isEarth && !this.vanished && this.doomAmt < 0.6) this._drawBorders(ctx, renderer);
     if (!this.vanished && this.doomAmt < 0.6) {
       // cities: dots everywhere, names for the selected nation
       for (const r of this.regions) for (const c of r.cities) {
@@ -483,6 +494,42 @@ class World {
     }
     ctx.restore();
     this._drawDoom(ctx, renderer, sunPos);
+  }
+
+  // [EARTH] project a lon/lat (degrees) to the canvas; null when on the far side
+  _proj(renderer, lon, lat) {
+    if (renderer.mode === 'map') return { x: (lon / 360 + 0.5) * MAP_W, y: (0.5 - lat / 180) * MAP_H, z: 1 };
+    const la = lat * Math.PI / 180, l0 = lon * Math.PI / 180 - this.life.view.yaw;
+    const x2 = Math.cos(la) * Math.sin(l0), y2 = Math.sin(la), z2 = Math.cos(la) * Math.cos(l0);
+    const ct = Math.cos(renderer.tilt), st = Math.sin(renderer.tilt), y = y2 * ct - z2 * st, z = y2 * st + z2 * ct;
+    return z > 0 ? { x: renderer.cx + x2 * renderer.R, y: renderer.cy - y * renderer.R, z } : null;
+  }
+  _drawBorders(ctx, renderer) {
+    const isMap = renderer.mode === 'map';
+    ctx.save(); ctx.lineJoin = 'round';
+    const path = (r) => {
+      for (const poly of r.polys) {
+        let prev = null;
+        for (let k = 0; k <= poly.length; k++) {
+          const [lon, lat] = poly[k % poly.length], p = this._proj(renderer, lon, lat);
+          if (p && prev && !(isMap && Math.abs(p.x - prev.x) > MAP_W / 2)) ctx.lineTo(p.x, p.y); else if (p) ctx.moveTo(p.x, p.y);
+          prev = p;
+        }
+      }
+    };
+    ctx.beginPath(); for (const r of this.regions) if (r.id !== this.sel) path(r);
+    ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = isMap ? 0.6 : 0.8; ctx.stroke();
+    const s = this.regions[this.sel];
+    if (s) { ctx.beginPath(); path(s); ctx.shadowColor = 'rgba(10,132,255,0.9)'; ctx.shadowBlur = 8; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); ctx.shadowBlur = 0; }
+    // country names for the bigger countries facing us (and always the selected one)
+    ctx.font = '500 10px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const r of this.regions) {
+      if (r.land < (isMap ? 40 : 28) && r.id !== this.sel) continue;
+      const p = this._proj(renderer, r.lon, r.lat); if (!p || p.z < 0.35) continue;
+      ctx.globalAlpha = r.id === this.sel ? 1 : 0.55 * p.z;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillText(r.name, p.x + 0.8, p.y + 0.8); ctx.fillStyle = '#fff'; ctx.fillText(r.name, p.x, p.y);
+    }
+    ctx.restore();
   }
 
   _drawDoom(ctx, renderer, sunPos) {
@@ -513,16 +560,36 @@ class World {
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sp.x, sp.y, r0 * 2.2, 0, 6.283); ctx.fill();
       if (t > 2.6 && t < 5) { const a = 1 - (t - 2.6) / 2.4; ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`; ctx.fillRect(0, 0, W, W); ctx.strokeStyle = `rgba(180,220,255,${a})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(sp.x, sp.y, (t - 2.6) * W * 0.6, 0, 6.283); ctx.stroke(); }
     } else if (d.type === 'blackhole') {
-      const k = Math.min(1, t / 2.5), brMax = Math.min(R * 0.32, W * 0.09), br = brMax * (0.4 + 0.6 * k);
-      const bx = W - brMax * 2.3 - 8, by = brMax * 1.4 + 8; // top-right corner, inside the view
-      ctx.translate(bx, by); ctx.rotate(t * 0.6);
-      for (let ring = 0; ring < 3; ring++) { // accretion disk
-        ctx.strokeStyle = `rgba(255,${150 + ring * 40},${60 + ring * 50},${0.55 - ring * 0.12})`; ctx.lineWidth = br * (0.18 - ring * 0.04);
-        ctx.beginPath(); ctx.ellipse(0, 0, br * (1.9 + ring * 0.35), br * (0.55 + ring * 0.1), 0, 0, 6.283); ctx.stroke();
+      // [UI] a black hole, not Saturn: dark shadow, thin photon ring, a hot accretion disk whose far side is
+      // lensed up over the top (and under the bottom) of the shadow, plus a dimming of the stars around it
+      const k = Math.min(1, t / 2.5), brMax = Math.min(R * 0.3, W * 0.085), br = brMax * (0.35 + 0.65 * k);
+      const bx = W - brMax * 2.6 - 10, by = brMax * 1.7 + 10;
+      const flick = 0.85 + 0.15 * Math.sin(t * 9);
+      const haze = ctx.createRadialGradient(bx, by, br, bx, by, br * 4.5);
+      haze.addColorStop(0, 'rgba(0,0,0,0.85)'); haze.addColorStop(0.5, 'rgba(0,0,0,0.35)'); haze.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = haze; ctx.beginPath(); ctx.arc(bx, by, br * 4.5, 0, 6.283); ctx.fill();
+      const disk = (half) => { // half = 0 back (behind the shadow), 1 front
+        ctx.save(); ctx.translate(bx, by); ctx.scale(1, 0.18);
+        const g = ctx.createRadialGradient(0, 0, br * 1.25, 0, 0, br * 3.6);
+        g.addColorStop(0, `rgba(255,250,235,${0.95 * flick})`); g.addColorStop(0.25, 'rgba(255,196,110,0.9)'); g.addColorStop(0.6, 'rgba(255,110,40,0.55)'); g.addColorStop(1, 'rgba(160,40,10,0)');
+        ctx.fillStyle = g; ctx.beginPath();
+        if (half) { ctx.arc(0, 0, br * 3.6, 0, Math.PI); ctx.arc(0, 0, br * 1.25, Math.PI, 0, true); } else { ctx.arc(0, 0, br * 3.6, Math.PI, 6.283); ctx.arc(0, 0, br * 1.25, 6.283, Math.PI, true); }
+        ctx.fill(); ctx.restore();
+      };
+      ctx.globalCompositeOperation = 'lighter';
+      disk(0);
+      // lensed image of the far disk, bent over the top and under the bottom of the shadow
+      for (const [a0, a1, wgt] of [[Math.PI * 1.04, Math.PI * 1.96, 1], [Math.PI * 0.08, Math.PI * 0.92, 0.45]]) {
+        const lg = ctx.createRadialGradient(bx, by, br * 1.05, bx, by, br * 1.75);
+        lg.addColorStop(0, `rgba(255,245,225,${0.95 * wgt * flick})`); lg.addColorStop(0.45, `rgba(255,170,80,${0.6 * wgt})`); lg.addColorStop(1, 'rgba(255,90,30,0)');
+        ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(bx, by, br * 1.75, a0, a1); ctx.arc(bx, by, br * 1.05, a1, a0, true); ctx.fill();
       }
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.283); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,200,140,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bx, by, br * 1.05, 0, 6.283); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.283); ctx.fill(); // event-horizon shadow
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(255,236,200,${0.9 * flick})`; ctx.lineWidth = Math.max(1, br * 0.05); ctx.beginPath(); ctx.arc(bx, by, br * 1.03, 0, 6.283); ctx.stroke(); // photon ring
+      disk(1);
+      ctx.globalCompositeOperation = 'source-over';
       if (this.doomAmt > 0) { // matter being pulled off the planet
         ctx.globalCompositeOperation = 'lighter';
         for (let s = 0; s < 60; s++) { const q = ((t * 0.6 + s / 60) % 1), ang = s * 0.9; const sx = cx + Math.cos(ang) * R * (1 - q) * 0.9 + (bx - cx) * q, sy = cy + Math.sin(ang) * R * (1 - q) * 0.9 + (by - cy) * q; ctx.fillStyle = `rgba(255,${140 + (s % 4) * 25},80,${0.7 * this.doomAmt * (1 - q)})`; ctx.fillRect(sx, sy, 2, 2); }
@@ -570,9 +637,18 @@ class World {
     }
     if (r && r.water < 0.22 && P.elev[i] >= P.seaLevel && !this.doom) { tags.push('🏜️ Drought'); ctx.strokeStyle = 'rgba(60,40,20,0.7)'; for (let s = 0; s < 8; s++) { ctx.beginPath(); ctx.moveTo(s * 30, gy + 6); ctx.lineTo(s * 30 + 12, gy + 14); ctx.lineTo(s * 30 + 6, gy + 22); ctx.stroke(); } em('🥀', W * 0.85, gy - 8); }
     if (this.foot[i] > 0.4 && !this.doom) { tags.push('🏭 Heavily developed'); em('🏭', W * 0.12, gy - 12); }
-    if (this.doomAmt > 0.3) {
+    if (this.doomAmt > 0.3 && this.doom.type !== 'meteors') { // [FIX] repaint the whole close-up, no water, sky or animals left
       const t = this.doom.type;
-      ctx.fillStyle = t === 'collision' ? 'rgba(255,80,20,0.55)' : t === 'supernova' ? 'rgba(255,240,220,0.45)' : 'rgba(10,0,20,0.75)'; ctx.fillRect(0, 0, W, H);
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      if (t === 'collision') { sky.addColorStop(0, '#2a0703'); sky.addColorStop(1, '#ff5a14'); }
+      else if (t === 'supernova') { sky.addColorStop(0, '#fff6e0'); sky.addColorStop(1, '#ffb86b'); }
+      else { sky.addColorStop(0, '#000'); sky.addColorStop(1, '#14061f'); }
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = t === 'collision' ? '#3a120a' : t === 'supernova' ? '#2b2420' : '#05020a';
+      ctx.beginPath(); ctx.moveTo(0, H); for (let x = 0; x <= W; x += 12) ctx.lineTo(x, gy + Math.sin(x * 0.09) * 6 + ((x * 37) % 11)); ctx.lineTo(W, H); ctx.fill();
+      if (t === 'collision') { ctx.strokeStyle = '#ff9a3c'; ctx.lineWidth = 2; for (let x = 10; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, gy + 8); ctx.lineTo(x + 12, gy + 20); ctx.lineTo(x + 6, H); ctx.stroke(); } }
+      if (t === 'blackhole') { ctx.strokeStyle = 'rgba(255,170,80,0.7)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(W * 0.75, H * 0.28, 40, 8, -0.2, 0, 6.283); ctx.stroke(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(W * 0.75, H * 0.28, 12, 0, 6.283); ctx.fill(); }
+      tags.length = 0;
       tags.push(t === 'collision' ? '🌋 Molten surface' : t === 'supernova' ? '☀️ Scorched by the supernova' : t === 'blackhole' ? '🕳️ Being torn apart' : '☄️ Bombarded');
     }
     if (tags.length) {

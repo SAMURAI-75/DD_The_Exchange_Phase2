@@ -52,7 +52,7 @@ class Renderer {
     const N = S * S;
     if (!this._pool) this._pool = {
       idx: new Int32Array(N), row: new Int32Array(N), lon0: new Float32Array(N), cosL: new Float32Array(N),
-      sinL: new Float32Array(N), limb: new Float32Array(N), gIdx: new Int32Array(N), gA: new Float32Array(N),
+      sinL: new Float32Array(N), limb: new Float32Array(N), gIdx: new Int32Array(N), gA: new Float32Array(N), trow: new Int32Array(N),
     };
     const pl = this._pool;
     let n = 0, gn = 0;
@@ -80,6 +80,7 @@ class Renderer {
           pl.lon0[n] = Math.atan2(x, z2);
           pl.cosL[n] = cosLat; pl.sinL[n] = y2;
           pl.limb[n] = 0.55 + 0.45 * z;
+          const tr = Math.floor((0.5 - lat * PIinv) * 1024); pl.trow[n] = tr < 0 ? 0 : tr > 1023 ? 1023 : tr; // [EARTH] hi-res texture row
           n++;
         } else if (d2 < 1.1881) { // 1.09^2
           const d = Math.sqrt(d2), q = 1 - (d - 1) / 0.09;
@@ -91,7 +92,7 @@ class Renderer {
     }
     this.gt = {
       idx: pl.idx.subarray(0, n), row: pl.row.subarray(0, n), lon0: pl.lon0.subarray(0, n),
-      cosL: pl.cosL.subarray(0, n), sinL: pl.sinL.subarray(0, n), limb: pl.limb.subarray(0, n),
+      cosL: pl.cosL.subarray(0, n), sinL: pl.sinL.subarray(0, n), limb: pl.limb.subarray(0, n), trow: pl.trow.subarray(0, n),
       gIdx: pl.gIdx.subarray(0, gn), gA: pl.gA.subarray(0, gn),
     };
     this.tableTilt = this.tilt;
@@ -113,8 +114,14 @@ class Renderer {
     let day = (light + 0.12) / 0.3;               // smoothstep(-0.12, 0.18)
     day = day <= 0 ? 0 : day >= 1 ? 1 : day * day * (3 - 2 * day);
     const direct = light > 0 ? light : 0;
-    const f = (0.12 + 0.88 * day * (0.5 + 0.5 * direct)) * limb;
-    let r = P.R[i] * f, g = P.G[i] * f, b = P.Bc[i] * f;
+    // [UI] darker, moonlit night side
+    const f = (0.035 + 0.965 * day * (0.45 + 0.55 * direct)) * limb;
+    let r, g, b;
+    if (this._ti >= 0) { // [EARTH] sharp NASA imagery, blended with the simulated biome where the climate has changed
+      const T = this._T, k = this._ti * 4, w = P.texW[i];
+      r = (T.day[k] * (1 - w) + P.R[i] * w) * f; g = (T.day[k + 1] * (1 - w) + P.G[i] * w) * f; b = (T.day[k + 2] * (1 - w) + P.Bc[i] * w) * f;
+    } else { r = P.R[i] * f; g = P.G[i] * f; b = P.Bc[i] * f; }
+    const nt = (1 - day) * limb; r += 3 * nt; g += 6 * nt; b += 16 * nt; // faint blue moonlight
     if (this._fx) {
       const z = (limb - 0.55) * 2.2222; // cos(angle to viewer)
       // ocean glint: bright, tight sun reflection on water
@@ -150,12 +157,16 @@ class Renderer {
     if (tw > 0) { r += 34 * tw * limb; g += 10 * tw * limb; }
 
     const doomed = this.world && this.world.doomAmt > 0.4 && this.world.doom.type !== 'meteors';
-    if (view.cities && !doomed) {
+    if (this._ti >= 0 && view.cities && !doomed) { // [EARTH] real night lights: tiny, sharp points
+      const L = this._T.night[this._ti] / 255;
+      if (L > 0.12 && (P.Tmap[i] > -40)) { const n = (1 - day) * L * L * limb * 1.15; r += 255 * n; g += 196 * n; b += 120 * n; }
+    } else if (view.cities && !doomed) {
       const c = P.city[i];
       if (c && dm < 0.5) {
         const n = (1 - day) * (1 - dm * 2) * (c / 255) * limb;
         const cc = this._pal.city;
-        r += cc[0] * n; g += cc[1] * n; b += cc[2] * n;
+        const sp = ((i * 2654435761) >>> 0) % 7 === 0 ? 1 : 0.25; // [UI] sparse, small sparkles instead of blobs
+        r += cc[0] * n * 0.6 * sp; g += cc[1] * n * 0.6 * sp; b += cc[2] * n * 0.6 * sp;
       }
     }
     if (view.clouds && !doomed) {
@@ -202,6 +213,7 @@ class Renderer {
     }
 
     const yaw = view.yaw, sunLon = view.sunLon;
+    const texOn = this.planet.isEarth && typeof EARTH !== 'undefined' && EARTH.tex.ok; this._T = texOn ? EARTH.tex : null;
     // [UI] sun direction in view space for the ocean glint (Blinn-Phong half vector with view = +z)
     const l0 = sunLon - yaw, sx2 = cosDec * Math.cos(l0), sy2 = sinDec;
     const sz = sy2 * Math.sin(this.tilt) + sx2 * Math.cos(this.tilt);
@@ -215,12 +227,14 @@ class Renderer {
       if (col >= MAP_W) col = MAP_W - 1;
       const row = t.row[k];
       const light = t.cosL[k] * Math.cos(lon - sunLon) * cosDec + t.sinL[k] * sinDec;
+      this._ti = texOn ? t.trow[k] * 2048 + ((u * 2048) | 0) : -1;
       this._shade(buf, t.idx[k], row * MAP_W + col, row, col, light, t.limb[k], view);
     }
   }
 
   _renderMap(view) {
     const P = this.planet, buf = this.buf;
+    const texOn = P.isEarth && typeof EARTH !== 'undefined' && EARTH.tex.ok; this._T = texOn ? EARTH.tex : null;
     this._fx = false;
     const cosDec = Math.cos(view.sunDec), sinDec = Math.sin(view.sunDec);
     for (let row = 0; row < MAP_H; row++) {
@@ -229,6 +243,7 @@ class Renderer {
         const lon = ((col + 0.5) / MAP_W - 0.5) * TWO_PI;
         const light = cl * Math.cos(lon - view.sunLon) * cosDec + sl * sinDec;
         const i = row * MAP_W + col;
+        this._ti = texOn ? (((row + 0.5) * 1024 / MAP_H) | 0) * 2048 + (((col + 0.5) * 2048 / MAP_W) | 0) : -1;
         this._shade(buf, i, i, row, col, light, 1, view);
       }
     }

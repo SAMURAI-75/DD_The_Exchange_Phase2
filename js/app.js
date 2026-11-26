@@ -57,7 +57,10 @@
   }
 
   function updateLabels() {
-    el.oceanOut.textContent = el.ocean.value + '%';
+    // [FEATURE] show what temperature is doing to the sea right now
+    const eff = Math.round(planet.effectiveOcean({ ocean: Number(el.ocean.value) / 100, temp: Number(el.temp.value) + (world.ready ? world.warming : 0), meltRaisesSea: el.melt.checked }) * 100);
+    el.oceanOut.textContent = eff === Number(el.ocean.value) ? el.ocean.value + '%' : `${el.ocean.value}% → ${eff}%`;
+    el.oceanOut.title = eff > Number(el.ocean.value) ? 'Melting ice is raising the sea' : eff < Number(el.ocean.value) ? 'Heat is evaporating the oceans / water locked in ice' : '';
     const t = Number(el.temp.value);
     el.tempOut.textContent = (t > 0 ? '+' : '') + t + ' °C';
     const m = Number(el.moisture.value);
@@ -98,6 +101,10 @@
     Sfx.generate();
     el.busy.hidden = false;
     // Let the "Generating…" overlay paint before the heavy loop runs.
+    if (EARTH.isEarthSeed(seed) && !EARTH.tex.ok) { // [EARTH] decode the NASA imagery once, then build
+      EARTH.load().then(() => { if (token === state.genToken) { state.genToken--; generate(); } }).catch((err) => { el.busy.hidden = true; showSeedError(err.message); });
+      return;
+    }
     setTimeout(() => {
       if (token !== state.genToken) return; // a newer request superseded this one
       try {
@@ -295,7 +302,7 @@
     input.addEventListener('input', () => { updateLabels(); state.needClassify = true; });
   }
   el.temp.addEventListener('input', () => { stopTimelapse(); forgetWinter(); updateLabels(); state.needClassify = true; });
-  el.melt.addEventListener('change', () => { state.needClassify = true; });
+  el.melt.addEventListener('change', () => { updateLabels(); state.needClassify = true; });
   el.rough.addEventListener('input', updateLabels);
   el.axial.addEventListener('input', () => { updateLabels(); writeHash(); });
   el.rough.addEventListener('change', generate); // full regen only on release
@@ -495,6 +502,8 @@
     const prog = dis.update(state.paused ? 0 : dt); // [FIX B12]
     const yrs = state.paused ? 0 : dt * state.yearsPerSec;
     world.update(state.paused ? 0 : dt, yrs);
+    life.hidden = world.vanished || world.doomAmt > 0.5;
+    if (world.ready && world.warming !== state.labelWarm) { state.labelWarm = world.warming; updateLabels(); }
     if (world.ready && Math.abs(world.warming - (state.lastWarm || 0)) > 0.08) { state.lastWarm = world.warming; state.needClassify = true; }
     if (world.doom && world.doom.applied && el.rebuild.hidden) { el.rebuild.hidden = false; renderRegionCard(); }
     if (prog && lastReport) { el.report.innerHTML = disasterReportHTML(lastReport, prog); if (prog.done) onRecovered(); }
@@ -643,7 +652,7 @@
     for (const b of el.disasterTypes.children) b.classList.toggle('on', b.dataset.key === chosenKey);
     el.strengthOut.textContent = DISASTERS[chosenKey].fmt(DISASTERS[chosenKey].value(Number(el.strength.value)));
     el.arm.classList.toggle('active', !!armedKey);
-    el.arm.textContent = armedKey ? '🎯 Armed: click a spot on the planet (Esc cancels)' : '🎯 Arm: then click the planet';
+    el.arm.textContent = armedKey ? '✋ Cancel' : '👆 Choose where it hits';
   }
   el.strength.addEventListener('input', syncDisasterUI);
   el.arm.addEventListener('click', () => {
@@ -798,7 +807,7 @@
     if (r.crops < 0.3) pills.push(['bad', '🌾 Crop failure']); else if (r.crops > 0.7) pills.push(['good', '🌾 Good harvests']);
     if (r.shock > 20) pills.push(['bad', '🕯️ Mourning']);
     card.innerHTML = `
-      <div class="rc-head"><span class="flag">${r.flag}</span><div><div class="rc-name">${esc(r.name)}</div><div class="rc-gov">${esc(r.gov)} · ${eco.govState}</div></div></div>
+      <div class="rc-head"><span class="flag">${r.flag}</span><div><div class="rc-name">${esc(r.name)}</div><div class="rc-gov">${r.gov ? esc(r.gov) + ' · ' : ''}${eco.govState}${r.disputed ? `<br><span style="color:var(--orange)">${esc(r.disputed)}</span>` : ''}</div></div></div>
       <div class="kpis"><div class="kpi"><div class="v">${fmtPop(r.pop)}</div><div class="k">population</div></div><div class="kpi"><div class="v" style="color:#ff6961">${fmtPop(r.dead)}</div><div class="k">deaths</div></div></div>
       <div class="mood"><span class="e">${m.emoji}</span><div class="l"><b>People feel: ${m.label}</b>${meter(m.v, toneCol(m.v))}</div></div>
       <div class="rc-row"><span>Public approval of government</span><b>${r.approval.toFixed(0)}%</b></div>${meter(r.approval, toneCol(r.approval))}
@@ -877,11 +886,11 @@
     if (!world.ready || life.game) return;
     plagueArmed = !plagueArmed;
     $('releasePlague').classList.toggle('active', plagueArmed);
-    $('releasePlague').textContent = plagueArmed ? '🧪 Armed: click where it starts (Esc cancels)' : '🧪 Release: then click the planet';
+    $('releasePlague').textContent = plagueArmed ? '✋ Cancel' : '👆 Choose where it starts';
   });
   document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && plagueArmed) { plagueArmed = false; $('releasePlague').click(); $('releasePlague').click(); } });
   function releasePlague(hit) {
-    plagueArmed = false; $('releasePlague').classList.remove('active'); $('releasePlague').textContent = '🧪 Release: then click the planet';
+    plagueArmed = false; $('releasePlague').classList.remove('active'); $('releasePlague').textContent = '👆 Choose where it starts';
     const cfg = { name: ($('pName').value || 'Unknown').trim().slice(0, 24) || 'Unknown', kind, r0: Number($('pR0').value), lethality: Number($('pLeth').value) / 200, cureDifficulty: Number($('pCure').value), air: $('pAir').checked, land: $('pLand').checked, water: $('pWater').checked };
     if (!world.release(cfg, hit.row, hit.col)) { flash('Release it on land where people live.'); return; }
     Sfx.asleep();
@@ -936,6 +945,22 @@
     msg.textContent = found.c ? `${found.c.name}, ${found.r.name}` : found.r.name;
     Sfx.inspect(); refreshInspect(); renderRegionCard();
   });
+
+  // ---------- [UI] tabs and the "what happens when I click" banner ----------
+  function showTab(group, name) {
+    const bar = document.querySelector(`[data-tabs="${group}"]`); if (!bar) return;
+    for (const b of bar.children) b.classList.toggle('on', b.dataset.tab === name);
+    for (const p of bar.parentElement.querySelectorAll(':scope > .pane')) p.hidden = p.dataset.pane !== name;
+  }
+  document.querySelectorAll('[data-tabs]').forEach((bar) => bar.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => showTab(bar.dataset.tabs, b.dataset.tab))));
+  function updateHint() {
+    const h = $('actionHint');
+    const msg = armedKey ? `👆 Click a spot on the planet to drop the ${DISASTERS[armedKey].label.replace(/^\S+\s/, '')}` : plagueArmed ? `👆 Click a spot on the planet where ${esc($('pName').value || 'the disease')} starts` : '';
+    h.hidden = !msg; if (msg) h.innerHTML = msg + ' <span>Esc to cancel</span>';
+  }
+  setInterval(updateHint, 150);
+  $('searchForm').addEventListener('submit', () => showTab('R', 'place'), true);
+  canvas.addEventListener('pointerup', () => { if (world.sel >= 0) showTab('R', 'place'); });
 
   // ---------- boot ----------
   updateLabels();

@@ -90,6 +90,9 @@ class Planet {
     this.Tmap = new Float32Array(N);   // [FEATURE] per-pixel temperature / moisture for the world simulation
     this.Mmap = new Float32Array(N);
     this.isEarth = false;
+    // [EARTH] satellite colour, land mask and night lights sampled at map resolution
+    this.texR = new Uint8Array(N); this.texG = new Uint8Array(N); this.texB = new Uint8Array(N);
+    this.texLand = new Uint8Array(N); this.texW = new Float32Array(N); this.nightL = new Float32Array(N);
     this.popK = 1.33e6;                // people per density unit per pixel-area (~8 bn on an Earthlike world)
 
     // Per-row latitude helpers (row 0 = north pole side).
@@ -152,12 +155,20 @@ class Planet {
         let ridge = 1 - Math.abs(nDetail(px * 2.3 + o[5], py * 2.3 + o[4], pz * 2.3 + o[3]));
         ridge *= ridge;
         let e = cont * 0.8 + detail * (0.18 + 0.32 * r) + ridge * 0.3 * r;
-        if (this.isEarth) { // real coastlines: land/sea from the outline map, relief from noise
-          const land = EARTH.landAt(((x + 0.5) / MAP_W - 0.5) * 360, this.latRad[y] * 57.29578);
+        if (this.isEarth) { // [EARTH] real coastlines and relief from NASA elevation data, colours from Blue Marble
+          const lon = ((x + 0.5) / MAP_W - 0.5) * 360, lat = this.latRad[y] * 57.29578;
+          const topo = EARTH.topoAt(lon, lat);
+          const land = topo >= 1 || (Math.abs(lat) > 60 && EARTH.countryAt(lon, lat) >= 0);
           const n01 = cont * 0.5 + 0.5;
-          // mostly lowland (realistic temperatures) with occasional ridged mountain ranges
-          const mtn = Math.max(0, cont - 0.15) * ridge * ridge * ridge;
-          e = land ? 0.5 + 0.025 * n01 + detail * 0.012 + mtn * 0.9 : 0.06 + 0.36 * n01 + detail * 0.03;
+          e = land ? 0.5 + 0.49 * Math.pow(topo / 255, 1.45) + detail * 0.003 : 0.06 + 0.36 * n01 + detail * 0.03;
+          this.texLand[i] = land ? 1 : 0;
+          const T = EARTH.tex, tx = Math.min(T.TW - 1, Math.floor((x + 0.5) / MAP_W * T.TW)), ty = Math.min(T.TH - 1, Math.floor((y + 0.5) / MAP_H * T.TH));
+          let sr = 0, sg = 0, sb = 0, sn = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { // 3x3 average at map resolution
+            const yy = Math.min(T.TH - 1, Math.max(0, ty + dy)), xx = (tx + dx + T.TW) % T.TW, k = yy * T.TW + xx;
+            sr += T.day[k * 4]; sg += T.day[k * 4 + 1]; sb += T.day[k * 4 + 2]; sn += T.night[k];
+          }
+          this.texR[i] = sr / 9; this.texG[i] = sg / 9; this.texB[i] = sb / 9; this.nightL[i] = sn / 9 / 255;
         }
         this.elev[i] = e;
         if (e < min) min = e;
@@ -187,17 +198,6 @@ class Planet {
       }
     }
     for (let b = 0; b < 1024; b++) hist[b] /= total;
-    if (this.isEarth) { // bright lights where the real big cities are
-      for (const c of CITIES) {
-        const cx = Math.floor((c[2] / 360 + 0.5) * MAP_W), cy = Math.floor((0.5 - c[3] / 180) * MAP_H), rad = 2 + Math.sqrt(c[4]) * 1.1;
-        for (let dy = -Math.ceil(rad); dy <= rad; dy++) for (let dx = -Math.ceil(rad); dx <= rad; dx++) {
-          const d = Math.hypot(dx, dy); if (d > rad) continue;
-          const y = cy + dy; if (y < 0 || y >= MAP_H) continue;
-          const i = y * MAP_W + ((cx + dx + MAP_W) % MAP_W);
-          this.cityNoise[i] = Math.max(this.cityNoise[i], 1 - (d / rad) * 0.35);
-        }
-      }
-    }
   }
 
   // Elevation value below which `fraction` of the surface area lies.
@@ -215,9 +215,13 @@ class Planet {
   }
 
   effectiveOcean(climate) {
-    // Warming melts ice and raises seas; cooling locks water in ice caps.
-    const melt = climate.meltRaisesSea ? 0.12 * (climate.temp / 30) : 0;
-    return clamp(climate.ocean + melt, 0.03, 0.97);
+    // [FEATURE] Warming first melts ice and raises the seas (up to ~+12 °C); beyond that, extreme heat
+    // evaporates the oceans. Cooling locks water up in ice sheets.
+    const t = climate.temp;
+    let d = 0;
+    if (climate.meltRaisesSea) d += t >= 0 ? 0.08 * Math.min(1, t / 12) : 0.12 * (t / 30);
+    if (t > 12) d -= (t - 12) * 0.018;
+    return clamp(climate.ocean + d, 0.03, 0.97);
   }
 
   // Climate for a single pixel. Shared by classify() and the inspector so
@@ -294,15 +298,24 @@ class Planet {
           const shade = b === B.SEA_ICE ? 1 : clamp(1 + (s.e - east) * 55 + (north - s.e) * 35, 0.7, 1.3);
           r = col[0] * shade; g = col[1] * shade; bl = col[2] * shade;
         }
+        if (this.isEarth) { const cl = this.climate; // [EARTH] satellite colours, drifting toward the simulated biome as the climate departs from today's
+          let w = Math.min(0.85, Math.abs(cl.temp) / 22 + Math.abs(cl.moisture) * 1.4);
+          if (s.land !== (this.texLand[i] === 1)) w = 1;                                   // flooded coast / exposed sea floor
+          const lum = (this.texR[i] + this.texG[i] + this.texB[i]) / 3;
+          if ((b === B.SNOW || b === B.SEA_ICE) && lum < 170 && cl.temp < -2) w = Math.max(w, 0.85); // new ice sheets
+          if (b !== B.SNOW && b !== B.SEA_ICE && lum > 200 && cl.temp > 3) w = Math.max(w, 0.7);     // melting ice
+          this.texW[i] = w;
+          r = this.texR[i] * (1 - w) + r * w; g = this.texG[i] * (1 - w) + g * w; bl = this.texB[i] * (1 - w) + bl * w;
+        }
         R[i] = clamp(r, 0, 255); G[i] = clamp(g, 0, 255); Bc[i] = clamp(bl, 0, 255);
 
         // Settlements: temperate, low, habitable land.
         let c = 0;
         if (s.land && s.h < 0.35 && s.T > 4 && s.T < 31 &&
             (b === B.GRASS || b === B.FOREST || b === B.SAVANNA || b === B.BEACH)) {
-          c = clamp((this.cityNoise[i] - 0.6) * 4.5, 0, 1);
+          c = clamp((this.cityNoise[i] - 0.68) * 5, 0, 1); // [UI] fewer, smaller settlements
         }
-        if (this.isEarth && s.land && this.cityNoise[i] > 0.75) c = clamp((this.cityNoise[i] - 0.6) * 4.5, 0, 1); // real cities in any climate
+        if (this.isEarth) c = s.land ? clamp(this.nightL[i] * 1.6 - 0.04, 0, 1) : 0; // [EARTH] people live where the real night lights are
         city[i] = (c * 255) | 0;
         const rural = s.land && s.T >= 0 && s.T <= 32 && b !== B.DESERT && b !== B.SNOW && b !== B.ROCK ? 0.05 : 0;
         this.popD[i] = c + rural;

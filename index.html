@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Tiny Terra — Planet Generator</title>
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="style.css?v=p2d" />
 </head>
 <body>
 <canvas id="space" aria-hidden="true"></canvas>
@@ -16,6 +16,10 @@
 <main>
   <!-- LEFT: world controls -->
   <aside class="panel">
+    <div class="seg tabs" role="tablist" data-tabs="L">
+      <button type="button" class="on" data-tab="planet">🌍 Planet</button><button type="button" data-tab="events">💥 Events</button><button type="button" data-tab="people">👥 People</button>
+    </div>
+    <div class="pane" data-pane="planet">
     <h2>Seed</h2>
     <form id="seedForm" class="seed-row" autocomplete="off">
       <input id="seed" type="text" maxlength="40" placeholder="any text or number" aria-label="Planet seed" />
@@ -54,26 +58,18 @@
     <h2>Presets</h2>
     <div class="grid2" id="presets"></div>
 
-    <h2>Disasters <small class="muted">Earth theme</small></h2>
+    </div>
+    <div class="pane" data-pane="events" hidden>
+    <h2>Natural disaster <small class="muted">pick one, then a spot</small></h2>
     <div class="grid2" id="disasterTypes"></div>
     <label class="slider">
       <span>Strength <output id="strengthOut"></output></span>
       <input id="strength" type="range" min="1" max="10" step="1" value="5" />
     </label>
-    <button id="arm" class="wide danger">🎯 Arm: then click the planet</button>
-    <button id="recover" class="wide" disabled>⏩ Simulate recovery</button>
+    <button id="arm" class="wide danger">👆 Choose where it hits</button>
+    <button id="recover" class="wide" disabled>🌱 Let the area recover</button>
 
-    <h2>Time <small class="muted">human impact</small></h2>
-    <div class="seg themes" id="timeSpeed" role="tablist" aria-label="Simulation speed">
-      <button type="button" data-v="0" class="on">⏸ Stop</button><button type="button" data-v="2">▶ 2 yr/s</button><button type="button" data-v="20">⏩ 20 yr/s</button>
-    </div>
-
-    <h2>War</h2>
-    <div class="grid2"><select id="warA" aria-label="Aggressor"></select><select id="warB" aria-label="Target"></select></div>
-    <button id="declareWar" class="wide danger">⚔️ Declare war</button>
-    <div id="warList" class="list"></div>
-
-    <h2>Pandemic lab</h2>
+    <h2>Start a pandemic</h2>
     <input id="pName" type="text" maxlength="24" placeholder="Name your pathogen" value="Crimson Flu" aria-label="Pathogen name" />
     <div class="seg themes" id="pKind" role="tablist" aria-label="Pathogen type" style="margin-top:8px">
       <button type="button" data-v="Virus" class="on">🦠 Virus</button><button type="button" data-v="Bacteria">🧫 Bacteria</button><button type="button" data-v="Fungus">🍄 Fungus</button>
@@ -84,7 +80,7 @@
     <label class="check"><input id="pAir" type="checkbox" checked /> Spreads by air travel</label>
     <label class="check"><input id="pLand" type="checkbox" checked /> Spreads across land borders</label>
     <label class="check"><input id="pWater" type="checkbox" /> Water-borne (thrives in hot, wet places)</label>
-    <button id="releasePlague" class="wide danger">🧪 Release: then click the planet</button>
+    <button id="releasePlague" class="wide danger">👆 Choose where it starts</button>
     <div id="plagueStatus" class="small muted"></div>
 
     <h2>End of the world</h2>
@@ -93,6 +89,20 @@
       <button type="button" data-v="supernova">💥 Sun explodes</button><button type="button" data-v="blackhole">🕳️ Black hole</button>
     </div>
     <button id="rebuild" class="wide" hidden>♻️ Make a new planet</button>
+
+    </div>
+    <div class="pane" data-pane="people" hidden>
+    <h2>Time <small class="muted">watch people change the planet</small></h2>
+    <div class="seg themes" id="timeSpeed" role="tablist" aria-label="Simulation speed">
+      <button type="button" data-v="0" class="on">⏸ Stop</button><button type="button" data-v="2">▶ 2 yr/s</button><button type="button" data-v="20">⏩ 20 yr/s</button>
+    </div>
+
+    <h2>Start a war <small class="muted">attacker, then target</small></h2>
+    <div class="grid2"><select id="warA" aria-label="Aggressor"></select><select id="warB" aria-label="Target"></select></div>
+    <button id="declareWar" class="wide danger">⚔️ Declare war</button>
+    <div id="warList" class="list"></div>
+
+    </div>
   </aside>
 
   <!-- CENTER: the planet -->
@@ -111,6 +121,7 @@
       <canvas id="planet" aria-label="Planet view. Drag to rotate, click to inspect."></canvas>
       <div id="busy" class="busy" hidden>Generating…</div>
       <div id="gameMsg" class="busy game-msg" hidden></div>
+      <div id="actionHint" class="action-hint" hidden></div>
     </div>
     <div class="playbar">
       <button id="play" class="play" title="Creature Catcher mini-game">🎮 Play Creature Catcher</button>
@@ -129,6 +140,10 @@
 
   <!-- RIGHT: info -->
   <aside class="panel">
+    <div class="seg tabs" role="tablist" data-tabs="R">
+      <button type="button" class="on" data-tab="place">📍 Place</button><button type="button" data-tab="world">📊 World</button><button type="button" data-tab="saved">⭐ Saved</button>
+    </div>
+    <div class="pane" data-pane="place">
     <h2>Search</h2>
     <form id="searchForm" class="seed-row" autocomplete="off">
       <input id="search" type="text" list="places" placeholder="A country or city, e.g. Bangalore" aria-label="Search a place" />
@@ -138,24 +153,29 @@
     <p id="searchMsg" class="msg"></p>
     <div id="regionCard" class="card" hidden></div>
 
-    <h2>World status</h2>
-    <div id="worldStats" class="wstats"></div>
-
     <div id="reportWrap" hidden>
       <h2>Disaster report</h2>
       <div id="report" class="report"></div>
     </div>
-
     <h2>Location</h2>
     <canvas id="scene" class="scene" hidden width="232" height="120" aria-label="Side view of the inspected landscape"></canvas>
     <div id="inspect" class="inspect muted">Click the planet to inspect a spot.</div>
 
-    <h2>Legend <small class="muted">click to highlight</small></h2>
-    <div id="legend" class="legend"></div>
+    </div>
+    <div class="pane" data-pane="world" hidden>
+    <h2>World status</h2>
+    <div id="worldStats" class="wstats"></div>
+
+
 
     <h2>Planet census</h2>
     <div id="stats" class="stats"></div>
 
+    <h2>Legend <small class="muted">click to highlight</small></h2>
+    <div id="legend" class="legend"></div>
+
+    </div>
+    <div class="pane" data-pane="saved" hidden>
     <h2>Share</h2>
     <div class="grid2">
       <button id="copyLink">🔗 Copy link</button>
@@ -170,18 +190,22 @@
     <h2>Saved planets</h2>
     <button id="savePlanet" class="wide">⭐ Save this planet</button>
     <div id="gallery" class="gallery"></div>
+
+    </div>
   </aside>
 </main>
 
-<script src="js/noise.js"></script>
-<script src="js/earth.js"></script>
-<script src="js/space.js"></script>
-<script src="js/planet.js"></script>
-<script src="js/render.js"></script>
-<script src="js/sound.js"></script>
-<script src="js/life.js"></script>
-<script src="js/disasters.js"></script>
-<script src="js/world.js"></script>
-<script src="js/app.js"></script>
+<script src="js/noise.js?v=p2d"></script>
+<script src="js/earth-data.js?v=p2d"></script>
+<script src="js/earth-tex.js?v=p2d"></script>
+<script src="js/earth.js?v=p2d"></script>
+<script src="js/space.js?v=p2d"></script>
+<script src="js/planet.js?v=p2d"></script>
+<script src="js/render.js?v=p2d"></script>
+<script src="js/sound.js?v=p2d"></script>
+<script src="js/life.js?v=p2d"></script>
+<script src="js/disasters.js?v=p2d"></script>
+<script src="js/world.js?v=p2d"></script>
+<script src="js/app.js?v=p2d"></script>
 </body>
 </html>

@@ -263,3 +263,17 @@ select {
 .stances { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; }
 .stances button { padding: 4px 7px; font-size: 11px; border-radius: 8px; }
 .stances button.on { background: var(--blue); color: #fff; }
+
+/* ---------- [UI] tabs and action banner ---------- */
+.seg.tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; margin: 0 0 6px; position: sticky; top: -18px; z-index: 2;
+  background: rgba(44,44,46,.92); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+.seg.tabs button { padding: 8px 4px; font-weight: 600; }
+.pane[hidden] { display: none; }
+.pane > h2:first-child { margin-top: 16px; }
+.action-hint {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3; pointer-events: none;
+  background: rgba(10,132,255,.92); color: #fff; font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(10,132,255,.35); text-align: center; max-width: calc(100% - 24px); width: max-content; animation: hintIn .25s ease;
+}
+.action-hint span { opacity: .75; font-weight: 500; margin-left: 8px; font-size: 12px; }
+@keyframes hintIn { from { opacity: 0; transform: translate(-50%, -6px); } }
