@@ -3,6 +3,8 @@
 'use strict';
 
 const GLOBE_SIZE = 600;
+// damage tint per disaster type id (1 asteroid, 2 quake, 3 tsunami, 4 volcano, 5 wildfire)
+const DISASTER_COLORS = [null, [40, 30, 26], [130, 98, 64], [104, 88, 64], [64, 40, 32], [34, 26, 20]];
 const TWO_PI = Math.PI * 2;
 const INV_TWO_PI = 1 / TWO_PI;
 
@@ -104,6 +106,16 @@ class Renderer {
     const direct = light > 0 ? light : 0;
     const f = (0.12 + 0.88 * day * (0.5 + 0.5 * direct)) * limb;
     let r = P.R[i] * f, g = P.G[i] * f, b = P.Bc[i] * f;
+    const dm = this.damage ? this.damage[i] : 0;
+    if (dm > 0) {
+      const dc = DISASTER_COLORS[this.dtype[i]] || DISASTER_COLORS[1];
+      const a = dm * 0.85;
+      r = r * (1 - a) + dc[0] * f * a; g = g * (1 - a) + dc[1] * f * a; b = b * (1 - a) + dc[2] * f * a;
+      if (dm > 0.75 && (this.dtype[i] === 1 || this.dtype[i] === 4 || this.dtype[i] === 5)) { // glowing embers / lava
+        const glow = (dm - 0.75) * 4 * (0.6 + 0.4 * Math.sin(i * 12.9898));
+        r += 220 * glow * limb; g += 70 * glow * limb;
+      }
+    }
     if (this.highlight >= 0 && P.biome[i] !== this.highlight) {
       const gray = (r + g + b) * 0.1; r = gray; g = gray; b = gray;
     }
@@ -114,8 +126,8 @@ class Renderer {
 
     if (view.cities) {
       const c = P.city[i];
-      if (c) {
-        const n = (1 - day) * (c / 255) * limb;
+      if (c && dm < 0.5) {
+        const n = (1 - day) * (1 - dm * 2) * (c / 255) * limb;
         const cc = this.planet.palette.city;
         r += cc[0] * n; g += cc[1] * n; b += cc[2] * n;
       }

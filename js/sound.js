@@ -78,6 +78,16 @@ const Sfx = {
     const notes = best ? [523, 659, 784, 1047, 1319] : [784, 659, 523, 392];
     notes.forEach((f, k) => this.tone(f, 0.2, { type: 'triangle', vol: 0.08, delay: k * 0.12 }));
   },
+  disaster(key) {
+    if (key === 'tsunami') { this.noise(1.6, { vol: 0.22, from: 600, to: 150 }); return; }
+    if (key === 'wildfire') { this.noise(1.4, { vol: 0.16, from: 2500, to: 900 }); return; }
+    if (key === 'asteroid') this.tone(1400, 0.7, { type: 'sawtooth', vol: 0.05, to: 200 });
+    const d = key === 'asteroid' ? 0.6 : 0;
+    setTimeout(() => {
+      this.noise(1.8, { vol: 0.3, from: 400, to: 60 });
+      this.tone(70, 1.6, { type: 'sine', vol: 0.25, to: 30 });
+    }, d * 1000);
+  },
   snapshot() { this.noise(0.12, { vol: 0.2, from: 4000, to: 1500 }); },
 };
 Sfx.init();

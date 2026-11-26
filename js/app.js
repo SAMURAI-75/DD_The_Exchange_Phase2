@@ -13,7 +13,8 @@
   const el = {
     seed: $('seed'), seedForm: $('seedForm'), randomSeed: $('randomSeed'), seedError: $('seedError'),
     ocean: $('ocean'), temp: $('temp'), moisture: $('moisture'), rough: $('rough'), melt: $('melt'), axial: $('axial'), tiltOut: $('tiltOut'),
-    legend: $('legend'), mute: $('mute'), play: $('play'), dpad: $('dpad'), gameMsg: $('gameMsg'), scene: $('scene'), themes: $('themes'), savePlanet: $('savePlanet'), gallery: $('gallery'),
+    legend: $('legend'), disasterTypes: $('disasterTypes'), strength: $('strength'), strengthOut: $('strengthOut'),
+    arm: $('arm'), recover: $('recover'), report: $('report'), reportWrap: $('reportWrap'), mute: $('mute'), play: $('play'), dpad: $('dpad'), gameMsg: $('gameMsg'), scene: $('scene'), themes: $('themes'), savePlanet: $('savePlanet'), gallery: $('gallery'),
     oceanOut: $('oceanOut'), tempOut: $('tempOut'), moistOut: $('moistOut'), roughOut: $('roughOut'),
     timelapse: $('timelapse'), presets: $('presets'),
     planetName: $('planetName'), planetClass: $('planetClass'),
@@ -23,8 +24,11 @@
     copyLink: $('copyLink'), snapshot: $('snapshot'), loadForm: $('loadForm'), loadCode: $('loadCode'), shareMsg: $('shareMsg'),
   };
 
-  const view = { yaw: 0, sunLon: 1.2, sunDec: 0.3, cloudShift: 0, clouds: true, cities: true };
+  const view = { yaw: 0, sunLon: 1.2, sunDec: 0.3, cloudShift: 0, clouds: true, cities: true, days: 0 };
   const life = new Life(planet, renderer, view);
+  const dis = new Disasters(planet, life);
+  renderer.damage = dis.damage; renderer.dtype = dis.dtype;
+  renderer.overlay = (ctx) => { drawSun(ctx); life.draw(ctx); dis.draw(ctx); drawClock(ctx); };
   const state = {
     paused: false,
     needClassify: false,
@@ -87,6 +91,7 @@
         planet.generate(seed, rough);
         planet.classify(readClimate());
         if (life.game) life.stopGame(false);
+        dis.clear(); el.reportWrap.hidden = true; el.recover.disabled = true;
         life.populate(10);
         refreshInfo();
         writeHash();
@@ -127,6 +132,7 @@
       `<div class="kpis">
         <div class="kpi"><div class="v">${t > 0 ? '+' : ''}${t.toFixed(1)}°</div><div class="k">avg temp (°C)</div></div>
         <div class="kpi"><div class="v">${pct(s.habitable)}</div><div class="k">habitable</div></div>
+        <div class="kpi" style="grid-column:1/-1"><div class="v">👥 ${fmtNum(s.population)}</div><div class="k">population</div></div>
       </div>` +
       bars.map(([n, v, c]) =>
         `<div class="stat"><div class="lbl"><span>${n}</span><b>${pct(v)}</b></div>
@@ -151,6 +157,7 @@
          <dt>Temperature</dt><dd>${d.temp.toFixed(1)} °C</dd>
          <dt>Moisture</dt><dd>${Math.round(d.moisture * 100)}%</dd>
          <dt>Settlements</dt><dd>${d.settled ? 'yes' : 'none'}</dd>
+         <dt>People here</dt><dd>${fmtNum(planet.popD[p.row * MAP_W + p.col] * planet.cosLat[p.row] * planet.popK)}</dd>
          <dt>Right now</dt><dd>${isDaytime(p) ? '☀️ day' : '🌙 night'}</dd>
        </dl>`;
   }
@@ -361,6 +368,7 @@
     if (e.type === 'pointerup' && d.moved <= 4) {
       const p = toCanvas(e);
       const hit = renderer.pick(p.x, p.y, view);
+      if (hit && armedKey) { doStrike(hit); return; }
       state.inspected = hit;
       renderer.marker = hit;
       if (hit) { Sfx.inspect(); refreshInspect(); }
@@ -447,11 +455,14 @@
     }
     if (state.needClassify) { state.needClassify = false; reclassify(); }
     life.update(state.paused ? 0 : dt);
+    const prog = dis.update(dt);
+    if (prog && lastReport) { el.report.innerHTML = disasterReportHTML(lastReport, prog); if (prog.done) onRecovered(); }
 
     if (!state.paused) {
       const day = Number(el.daySpeed.value) / 100;   // 0..1
       const spin = Number(el.spinSpeed.value) / 100; // 0..1
       view.sunLon -= dt * day * 1.6;
+      view.days += dt * day * 1.6 / (Math.PI * 2);
       if (!state.drag && !life.game) view.yaw += dt * spin * 0.9;
       view.cloudShift += dt * (4 + day * 10);
       state.season += dt * day * 0.12;
@@ -572,6 +583,104 @@
     const b = e.target.closest && e.target.closest('button');
     if (b && b !== el.mute && !b.closest('#themes') && b.id !== 'play' && b.id !== 'randomSeed') Sfx.click();
   });
+
+  // ---------- disasters ----------
+  let armedKey = null, chosenKey = 'asteroid', lastReport = null, winterApplied = 0;
+  for (const key of Object.keys(DISASTERS)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.key = key; b.textContent = DISASTERS[key].label;
+    b.addEventListener('click', () => { chosenKey = key; syncDisasterUI(); });
+    el.disasterTypes.appendChild(b);
+  }
+  function syncDisasterUI() {
+    for (const b of el.disasterTypes.children) b.classList.toggle('on', b.dataset.key === chosenKey);
+    el.strengthOut.textContent = DISASTERS[chosenKey].fmt(DISASTERS[chosenKey].value(Number(el.strength.value)));
+    el.arm.classList.toggle('active', !!armedKey);
+    el.arm.textContent = armedKey ? '🎯 Armed: click a spot on the planet (Esc cancels)' : '🎯 Arm: then click the planet';
+  }
+  el.strength.addEventListener('input', syncDisasterUI);
+  el.arm.addEventListener('click', () => {
+    if (planet.theme !== 'earth') { flash('Disasters run on the 🌍 Earth theme. Switch theme first.'); return; }
+    if (life.game) { flash('Finish the game first.'); return; }
+    armedKey = armedKey ? null : chosenKey;
+    syncDisasterUI();
+  });
+  document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && armedKey) { armedKey = null; syncDisasterUI(); } });
+  function doStrike(hit) {
+    if (planet.theme !== 'earth') { armedKey = null; syncDisasterUI(); return; }
+    const rep = dis.strike(armedKey, Number(el.strength.value), hit.row, hit.col);
+    armedKey = null; syncDisasterUI();
+    if (!rep) return;
+    lastReport = rep;
+    if (rep.coolC > 0) {               // impact / volcanic winter cools the planet
+      const t = Number(el.temp.value);
+      setSlider(el.temp, t - rep.coolC);
+      winterApplied += t - Number(el.temp.value);
+      updateLabels(); state.needClassify = true;
+    }
+    el.reportWrap.hidden = false;
+    el.report.innerHTML = disasterReportHTML(rep, null);
+    el.recover.disabled = false;
+    state.inspected = hit; renderer.marker = hit; refreshInspect();
+    Sfx.disaster(rep.key);
+  }
+  el.recover.addEventListener('click', () => {
+    if (!lastReport || dis.recovering) return;
+    if (dis.startRecovery(lastReport.recovery[1])) el.recover.disabled = true;
+  });
+  function onRecovered() {
+    if (winterApplied) { setSlider(el.temp, Number(el.temp.value) + winterApplied); winterApplied = 0; updateLabels(); state.needClassify = true; }
+    el.recover.disabled = true;
+  }
+  syncDisasterUI();
+
+  // ---------- sun + clock ----------
+  function drawSun(ctx) {
+    if (!planet.seed) return;
+    const lat = view.sunDec, lon = view.sunLon;
+    if (renderer.mode === 'map') {
+      let u = lon / (Math.PI * 2) + 0.5; u -= Math.floor(u);
+      const x = u * MAP_W, y = (0.5 - lat / Math.PI) * MAP_H;
+      ctx.save(); ctx.font = '18px system-ui, "Apple Color Emoji", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('☀️', x, y); ctx.restore();
+      return;
+    }
+    if (!renderer.R) return;
+    // sun direction in view space
+    const l0 = lon - view.yaw;
+    const x2 = Math.cos(lat) * Math.sin(l0), y2 = Math.sin(lat), z2 = Math.cos(lat) * Math.cos(l0);
+    const ct = Math.cos(renderer.tilt), st = Math.sin(renderer.tilt);
+    const sy = y2 * ct - z2 * st, sz = y2 * st + z2 * ct;
+    let len = Math.hypot(x2, sy);
+    let dx = len > 0.05 ? x2 / len : 0.7, dy = len > 0.05 ? sy / len : 0.7;
+    const W = renderer.canvas.width;
+    const dist = Math.min(renderer.R * 1.22, W / 2 - 34);
+    const px = renderer.cx + dx * dist, py = renderer.cy - dy * dist;
+    const behind = sz < -0.2 && len < 0.6;           // sun hidden behind the planet
+    ctx.save();
+    ctx.globalAlpha = behind ? 0.35 : 1;
+    const g = ctx.createRadialGradient(px, py, 2, px, py, 34);
+    g.addColorStop(0, 'rgba(255,250,220,1)'); g.addColorStop(0.35, 'rgba(255,210,90,0.9)'); g.addColorStop(1, 'rgba(255,170,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, 34, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
+  function drawClock(ctx) {
+    if (!planet.seed) return;
+    const lonC = renderer.mode === 'map' ? 0 : view.yaw;
+    let h = 12 + ((lonC - view.sunLon) / (Math.PI * 2)) * 24;
+    h = ((h % 24) + 24) % 24;
+    const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
+    const season = view.sunDec > 0.06 ? 'Northern summer' : view.sunDec < -0.06 ? 'Northern winter' : 'Equinox';
+    const W = renderer.canvas.width;
+    ctx.save();
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(W - 196, 10, 186, 44);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 15px system-ui';
+    ctx.fillText(`${hh < 6 || hh >= 19 ? '🌙' : '☀️'} Day ${Math.floor(view.days) + 1} · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, W - 18, 16);
+    ctx.fillStyle = '#c9d2e3'; ctx.font = '11px system-ui';
+    ctx.fillText(`${renderer.mode === 'map' ? 'at 0° longitude' : 'at view centre'} · ${season}`, W - 18, 36);
+    ctx.restore();
+  }
 
   // ---------- boot ----------
   updateLabels();

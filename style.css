@@ -132,3 +132,18 @@ button.play:hover { filter: brightness(1.1); background: linear-gradient(135deg,
 
 .dpad[hidden], .game-msg[hidden] { display: none; }
 .scene[hidden] { display: none; }
+
+button.danger { background: #3a1820; border-color: #6a2a36; }
+button.danger.active { background: #7a1f2e; color: #fff; border-color: #ff6b6b; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 4px #ff6b6b44; } }
+@media (prefers-reduced-motion: reduce) { button.danger.active { animation: none; } }
+button:disabled { opacity: .45; cursor: not-allowed; }
+#disasterTypes button.on { border-color: #ff6b6b; color: #ffb0b0; }
+.report { font-size: 13px; background: #1a0f14; border: 1px solid #4a2430; border-radius: 10px; padding: 10px; }
+.rep-head { font-size: 15px; margin-bottom: 2px; }
+.rep-kpis { margin: 8px 0; }
+.v.red { color: #ff7b7b; }
+.small { font-size: 12px; }
+.env { margin: 6px 0; padding-left: 16px; }
+.warn { color: #ffcf7b; font-size: 12px; margin: 6px 0; }
+.bar.rec { margin-top: 6px; }

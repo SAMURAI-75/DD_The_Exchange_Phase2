@@ -52,6 +52,15 @@
 
     <h2>Presets</h2>
     <div class="grid2" id="presets"></div>
+
+    <h2>Disasters <small class="muted">Earth theme</small></h2>
+    <div class="grid2" id="disasterTypes"></div>
+    <label class="slider">
+      <span>Strength <output id="strengthOut"></output></span>
+      <input id="strength" type="range" min="1" max="10" step="1" value="5" />
+    </label>
+    <button id="arm" class="wide danger">🎯 Arm: then click the planet</button>
+    <button id="recover" class="wide" disabled>⏩ Simulate recovery</button>
   </aside>
 
   <!-- CENTER: the planet -->
@@ -88,6 +97,11 @@
 
   <!-- RIGHT: info -->
   <aside class="panel">
+    <div id="reportWrap" hidden>
+      <h2>Disaster report</h2>
+      <div id="report" class="report"></div>
+    </div>
+
     <h2>Location</h2>
     <canvas id="scene" class="scene" hidden width="232" height="120" aria-label="Side view of the inspected landscape"></canvas>
     <div id="inspect" class="inspect muted">Click the planet to inspect a spot.</div>
@@ -120,6 +134,7 @@
 <script src="js/render.js"></script>
 <script src="js/sound.js"></script>
 <script src="js/life.js"></script>
+<script src="js/disasters.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

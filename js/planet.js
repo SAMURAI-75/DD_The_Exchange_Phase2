@@ -106,6 +106,8 @@ class Planet {
     this.G = new Uint8Array(N);
     this.Bc = new Uint8Array(N);
     this.city = new Uint8Array(N);
+    this.popD = new Float32Array(N);   // people density (0..~1)
+    this.popK = 1.33e6;                // people per density unit per pixel-area (~8 bn on an Earthlike world)
 
     // Per-row latitude helpers (row 0 = north pole side).
     this.latRad = new Float32Array(MAP_H);
@@ -263,7 +265,7 @@ class Planet {
     const oceanFrac = this.effectiveOcean(this.climate);
     this.seaLevel = this.quantile(oceanFrac);
 
-    const st = { ocean: 0, ice: 0, desert: 0, forest: 0, grass: 0, tundra: 0, rock: 0, habitable: 0, temp: 0, total: 0, cities: 0 };
+    const st = { ocean: 0, ice: 0, desert: 0, forest: 0, grass: 0, tundra: 0, rock: 0, habitable: 0, temp: 0, total: 0, cities: 0, pop: 0 };
     const { R, G, Bc, biome, city, elev } = this;
     const TH = this.palette, SHALLOW_RGB = TH.shallow, DEEP_RGB = TH.deep;
 
@@ -298,6 +300,9 @@ class Planet {
           c = clamp((this.cityNoise[i] - 0.6) * 4.5, 0, 1);
         }
         city[i] = (c * 255) | 0;
+        const rural = s.land && s.T >= 0 && s.T <= 32 && b !== B.DESERT && b !== B.SNOW && b !== B.ROCK ? 0.05 : 0;
+        this.popD[i] = c + rural;
+        st.pop += (c + rural) * w;
 
         st.total += w;
         st.temp += s.T * w;
@@ -318,6 +323,7 @@ class Planet {
       grass: st.grass / T, tundra: st.tundra / T, rock: st.rock / T,
       habitable: st.habitable / T, avgTemp: st.temp / T, cities: st.cities / T,
       oceanTarget: oceanFrac,
+      population: st.pop * this.popK,
     };
   }
 

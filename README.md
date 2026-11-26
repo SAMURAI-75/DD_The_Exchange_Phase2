@@ -43,7 +43,6 @@ and visit http://localhost:8000
 
 ---
 
-
 A planet generator that builds miniature worlds from a seed. You can see each planet as a rotating 3D globe or a flat 2D map, watch day and night sweep across it, and reshape its climate live.
 
 ## Run it
@@ -67,6 +66,9 @@ No install, no build, no internet, no API keys.
 | Hot → deserts, cold → snow | Climate is recalculated live as you drag a slider |
 
 ### Extras
+- **☄️ Disasters (Earth theme):** pick an asteroid, earthquake, tsunami, volcano or wildfire, set its strength, press **Arm**, then click anywhere on the planet. You get an animated impact, a scar on the surface (crater, ash, flood mud or burn) and a **disaster report** with deaths (and % of the world), injured, displaced, km² affected, animals and species hit, environmental effects, global effects and **recovery time**. Large asteroids and super-volcanoes cause an **impact winter** that cools the whole planet (the temperature slider drops and ice spreads). **⏩ Simulate recovery** animates the planet healing year by year. Figures come from simplified models, for illustration.
+- **👥 Population:** each planet gets a population (about 8 billion on an Earthlike world), concentrated in temperate, low, habitable regions. The inspector shows how many people live at the clicked spot.
+- **☀️ Visible sun and planet clock:** a glowing sun shows where light comes from, and a clock shows the day number, local time at the view centre and the season.
 - **🔊 Sound effects**, synthesised live with the Web Audio API (no audio files): generate whoosh, a theme chime for each world, inspect blip, catch jingles that rise in pitch for rarer creatures, a buzz for sleeping creatures, a countdown tick in the last 5 seconds, game start and game over fanfares, a camera shutter on Save PNG, and soft UI clicks. The 🔊/🔇 button mutes them, and the setting is remembered.
 - **🎮 Creature Catcher mini-game:** fly a themed craft (✈️ plane on Earth, 🍭 lollipop plane on Candy, 🛸 UFO on Alien) with **arrow keys / WASD**, or the on-screen D-pad for touch and mouse. The planet turns beneath you. You have 60 seconds to catch creatures under your craft. Creatures on the **night side are asleep 💤 and can't be caught**, so you have to chase the daylight. Rare creatures are worth 2, ⭐ is worth 5, and your best score is saved. Press **Esc** to quit.
 - **Themed wildlife** lives on the planet, matched to each biome: whales in the ocean, camels in deserts and penguins on ice on Earth; gummy bears, unicorns and cupcakes on Candy; aliens, octopi and invaders on Alien. They doze and dim at night.
@@ -95,6 +97,7 @@ js/planet.js   generate(): noise fields; classify(): climate -> biome -> colour 
 js/render.js   software renderer: orthographic globe via per-pixel lookup table, map view, lighting
 js/sound.js    Web Audio synthesised sound effects + mute
 js/life.js     creatures, landscape preview, Creature Catcher game
+js/disasters.js disaster models, impact report, recovery
 js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 ```
 
