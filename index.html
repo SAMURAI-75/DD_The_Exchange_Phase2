@@ -23,9 +23,9 @@
       <button type="button" id="randomSeed" title="Random seed (R)">🎲</button>
     </form>
     <p id="seedError" class="error" role="alert" hidden></p>
+    <button type="button" id="realEarth" class="wide earth-btn">🌍 Load the real Earth</button>
 
-    <h2>World theme</h2>
-    <div class="seg themes" id="themes" role="tablist" aria-label="World theme"></div>
+    <div id="themes" hidden></div>
 
     <h2>Climate</h2>
     <label class="slider">
@@ -62,6 +62,37 @@
     </label>
     <button id="arm" class="wide danger">🎯 Arm: then click the planet</button>
     <button id="recover" class="wide" disabled>⏩ Simulate recovery</button>
+
+    <h2>Time <small class="muted">human impact</small></h2>
+    <div class="seg themes" id="timeSpeed" role="tablist" aria-label="Simulation speed">
+      <button type="button" data-v="0" class="on">⏸ Stop</button><button type="button" data-v="2">▶ 2 yr/s</button><button type="button" data-v="20">⏩ 20 yr/s</button>
+    </div>
+
+    <h2>War</h2>
+    <div class="grid2"><select id="warA" aria-label="Aggressor"></select><select id="warB" aria-label="Target"></select></div>
+    <button id="declareWar" class="wide danger">⚔️ Declare war</button>
+    <div id="warList" class="list"></div>
+
+    <h2>Pandemic lab</h2>
+    <input id="pName" type="text" maxlength="24" placeholder="Name your pathogen" value="Crimson Flu" aria-label="Pathogen name" />
+    <div class="seg themes" id="pKind" role="tablist" aria-label="Pathogen type" style="margin-top:8px">
+      <button type="button" data-v="Virus" class="on">🦠 Virus</button><button type="button" data-v="Bacteria">🧫 Bacteria</button><button type="button" data-v="Fungus">🍄 Fungus</button>
+    </div>
+    <label class="slider"><span>Infectiousness (R₀) <output id="pR0Out"></output></span><input id="pR0" type="range" min="1" max="10" step="0.5" value="3" /></label>
+    <label class="slider"><span>Lethality <output id="pLethOut"></output></span><input id="pLeth" type="range" min="1" max="100" step="1" value="4" /></label>
+    <label class="slider"><span>Cure difficulty <output id="pCureOut"></output></span><input id="pCure" type="range" min="1" max="10" step="1" value="5" /></label>
+    <label class="check"><input id="pAir" type="checkbox" checked /> Spreads by air travel</label>
+    <label class="check"><input id="pLand" type="checkbox" checked /> Spreads across land borders</label>
+    <label class="check"><input id="pWater" type="checkbox" /> Water-borne (thrives in hot, wet places)</label>
+    <button id="releasePlague" class="wide danger">🧪 Release: then click the planet</button>
+    <div id="plagueStatus" class="small muted"></div>
+
+    <h2>End of the world</h2>
+    <div class="grid2" id="dooms">
+      <button type="button" data-v="meteors">☄️ Meteor storm</button><button type="button" data-v="collision">🪐 Planet collision</button>
+      <button type="button" data-v="supernova">💥 Sun explodes</button><button type="button" data-v="blackhole">🕳️ Black hole</button>
+    </div>
+    <button id="rebuild" class="wide" hidden>♻️ Make a new planet</button>
   </aside>
 
   <!-- CENTER: the planet -->
@@ -98,6 +129,18 @@
 
   <!-- RIGHT: info -->
   <aside class="panel">
+    <h2>Search</h2>
+    <form id="searchForm" class="seed-row" autocomplete="off">
+      <input id="search" type="text" list="places" placeholder="A country or city, e.g. Bangalore" aria-label="Search a place" />
+      <button type="submit">Find</button>
+    </form>
+    <datalist id="places"></datalist>
+    <p id="searchMsg" class="msg"></p>
+    <div id="regionCard" class="card" hidden></div>
+
+    <h2>World status</h2>
+    <div id="worldStats" class="wstats"></div>
+
     <div id="reportWrap" hidden>
       <h2>Disaster report</h2>
       <div id="report" class="report"></div>
@@ -131,12 +174,14 @@
 </main>
 
 <script src="js/noise.js"></script>
+<script src="js/earth.js"></script>
 <script src="js/space.js"></script>
 <script src="js/planet.js"></script>
 <script src="js/render.js"></script>
 <script src="js/sound.js"></script>
 <script src="js/life.js"></script>
 <script src="js/disasters.js"></script>
+<script src="js/world.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

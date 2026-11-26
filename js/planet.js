@@ -42,28 +42,6 @@ const THEMES = {
     shallow: [47, 127, 196], deep: [8, 30, 72],
     cloud: [245, 245, 245], city: [255, 196, 110], glow: [90, 160, 255],
   },
-  candy: {
-    label: '🍭 Candy',
-    names: ['Grape soda depths', 'Strawberry milk sea', 'Bubblegum shallows', 'Frosting floes', 'Sprinkle shore',
-      'Sugar dunes', 'Mint meadow', 'Gumdrop grove', 'Lollipop jungle', 'Marshmallow plains',
-      'Whipped-cream peaks', 'Chocolate mountains', 'Caramel fields'],
-    colors: [[110, 40, 130], [214, 96, 160], [255, 168, 210], [255, 246, 250], [255, 214, 150],
-      [255, 234, 205], [150, 238, 190], [255, 112, 160], [226, 58, 138], [246, 226, 236],
-      [255, 255, 255], [108, 58, 34], [222, 150, 70]],
-    shallow: [255, 168, 214], deep: [120, 40, 130],
-    cloud: [255, 205, 238], city: [130, 255, 248], glow: [255, 140, 210],
-  },
-  alien: {
-    label: '👽 Alien',
-    names: ['Abyssal ooze', 'Ooze sea', 'Acid shallows', 'Crystal floes', 'Glass sand',
-      'Rust flats', 'Violet moss', 'Fungal forest', 'Glowshroom jungle', 'Ash plains',
-      'Methane frost', 'Obsidian spires', 'Amber scrub'],
-    colors: [[10, 60, 60], [26, 120, 100], [70, 210, 150], [190, 255, 240], [200, 236, 255],
-      [196, 90, 58], [150, 84, 204], [108, 40, 160], [62, 22, 122], [112, 110, 132],
-      [214, 250, 255], [42, 36, 54], [232, 170, 40]],
-    shallow: [70, 214, 150], deep: [8, 52, 56],
-    cloud: [196, 255, 206], city: [120, 255, 120], glow: [120, 255, 170],
-  },
 };
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -109,6 +87,9 @@ class Planet {
     this.Bc = new Uint8Array(N);
     this.city = new Uint8Array(N);
     this.popD = new Float32Array(N);   // people density (0..~1)
+    this.Tmap = new Float32Array(N);   // [FEATURE] per-pixel temperature / moisture for the world simulation
+    this.Mmap = new Float32Array(N);
+    this.isEarth = false;
     this.popK = 1.33e6;                // people per density unit per pixel-area (~8 bn on an Earthlike world)
 
     // Per-row latitude helpers (row 0 = north pole side).
@@ -138,6 +119,7 @@ class Planet {
     const r = clamp(Number.isFinite(roughness) ? roughness : 0.5, 0, 1);
     this.seed = s;
     this.roughness = r;
+    this.isEarth = typeof EARTH !== 'undefined' && EARTH.isEarthSeed(s); // [FEATURE] "Earth" builds the real planet
 
     const rng = mulberry32(hashString(s));
     const nCont = createNoise3D(rng);
@@ -169,7 +151,14 @@ class Planet {
         const detail = fbm(nDetail, px * 3 + o[3], py * 3 + o[4], pz * 3 + o[5], detailOct, detailPers);
         let ridge = 1 - Math.abs(nDetail(px * 2.3 + o[5], py * 2.3 + o[4], pz * 2.3 + o[3]));
         ridge *= ridge;
-        const e = cont * 0.8 + detail * (0.18 + 0.32 * r) + ridge * 0.3 * r;
+        let e = cont * 0.8 + detail * (0.18 + 0.32 * r) + ridge * 0.3 * r;
+        if (this.isEarth) { // real coastlines: land/sea from the outline map, relief from noise
+          const land = EARTH.landAt(((x + 0.5) / MAP_W - 0.5) * 360, this.latRad[y] * 57.29578);
+          const n01 = cont * 0.5 + 0.5;
+          // mostly lowland (realistic temperatures) with occasional ridged mountain ranges
+          const mtn = Math.max(0, cont - 0.15) * ridge * ridge * ridge;
+          e = land ? 0.5 + 0.025 * n01 + detail * 0.012 + mtn * 0.9 : 0.06 + 0.36 * n01 + detail * 0.03;
+        }
         this.elev[i] = e;
         if (e < min) min = e;
         if (e > max) max = e;
@@ -198,6 +187,17 @@ class Planet {
       }
     }
     for (let b = 0; b < 1024; b++) hist[b] /= total;
+    if (this.isEarth) { // bright lights where the real big cities are
+      for (const c of CITIES) {
+        const cx = Math.floor((c[2] / 360 + 0.5) * MAP_W), cy = Math.floor((0.5 - c[3] / 180) * MAP_H), rad = 2 + Math.sqrt(c[4]) * 1.1;
+        for (let dy = -Math.ceil(rad); dy <= rad; dy++) for (let dx = -Math.ceil(rad); dx <= rad; dx++) {
+          const d = Math.hypot(dx, dy); if (d > rad) continue;
+          const y = cy + dy; if (y < 0 || y >= MAP_H) continue;
+          const i = y * MAP_W + ((cx + dx + MAP_W) % MAP_W);
+          this.cityNoise[i] = Math.max(this.cityNoise[i], 1 - (d / rad) * 0.35);
+        }
+      }
+    }
   }
 
   // Elevation value below which `fraction` of the surface area lies.
@@ -230,7 +230,7 @@ class Planet {
     const h = land ? (e - sea) / Math.max(1e-6, 1 - sea) : (sea - e) / Math.max(1e-6, sea);
     const lat = this.latRad[row];
     const latDeg = Math.abs(lat) * 57.29578;
-    let T = 33 - 50 * Math.pow(Math.abs(this.sinLat[row]), 1.6) + c.temp;
+    let T = (this.isEarth ? 31 - 48 * Math.pow(Math.abs(this.sinLat[row]), 2.2) : 33 - 50 * Math.pow(Math.abs(this.sinLat[row]), 1.6)) + c.temp; // Earth: closer to real zonal means
     if (land) T -= h * 42;           // lapse rate: mountains are colder
     else T = T * 0.92 + 1;           // oceans are slightly moderated
     // Subtropical dry belt (~25°) like Earth's Hadley cells; extreme heat dries land out.
@@ -278,6 +278,7 @@ class Planet {
         const s = this.sample(i, y);
         const b = this.biomeFor(s);
         biome[i] = b;
+        this.Tmap[i] = s.T; this.Mmap[i] = s.m;
 
         let r, g, bl;
         if (b === B.SHALLOW || b === B.OCEAN || b === B.DEEP) {
@@ -301,6 +302,7 @@ class Planet {
             (b === B.GRASS || b === B.FOREST || b === B.SAVANNA || b === B.BEACH)) {
           c = clamp((this.cityNoise[i] - 0.6) * 4.5, 0, 1);
         }
+        if (this.isEarth && s.land && this.cityNoise[i] > 0.75) c = clamp((this.cityNoise[i] - 0.6) * 4.5, 0, 1); // real cities in any climate
         city[i] = (c * 255) | 0;
         const rural = s.land && s.T >= 0 && s.T <= 32 && b !== B.DESERT && b !== B.SNOW && b !== B.ROCK ? 0.05 : 0;
         this.popD[i] = c + rural;
@@ -367,6 +369,7 @@ class Planet {
   // Deterministic, pronounceable name from the seed.
   name() {
     if (!this.seed) return '';
+    if (this.isEarth) return 'Earth';
     const rng = mulberry32(hashString('name:' + this.seed));
     const syl = ['ka', 'ri', 'ze', 'on', 'ta', 've', 'lu', 'mor', 'dra', 'xi', 'sel', 'qua', 'no', 'bek', 'ia', 'thal', 'or', 'en', 'vy', 'sa'];
     const n = 2 + Math.floor(rng() * 2);

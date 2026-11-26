@@ -15,24 +15,6 @@ const LIFE = {
     flora: { ocean: '', ice: '❄️', beach: '🌴', desert: '🌵', grass: '🌾', forest: '🌳', tundra: '🪨', rock: '🏔️' },
     sky: { day: ['#6fb9ff', '#d9f0ff'], night: ['#060a1f', '#1b2350'] },
   },
-  candy: {
-    craft: '✈️', craftTop: '🍭',
-    creatures: {
-      ocean: ['🐡', '🍓'], ice: ['🍦', '🐧'], beach: ['🍩', '🦩'], desert: ['🍪', '🧁'],
-      grass: ['🦄', '🐰'], forest: ['🧸', '🍬'], tundra: ['🐑', '🍡'], rock: ['🍫', '🦄'],
-    },
-    flora: { ocean: '', ice: '🍥', beach: '🍦', desert: '🍪', grass: '🍬', forest: '🍭', tundra: '🍡', rock: '🍫' },
-    sky: { day: ['#ff9ad5', '#fff0f8'], night: ['#2a0a3c', '#6a2a7a'] },
-  },
-  alien: {
-    craft: '🛸', craftTop: '',
-    creatures: {
-      ocean: ['🐙', '🦑'], ice: ['💎', '🤖'], beach: ['🦠', '🐚'], desert: ['🦂', '👾'],
-      grass: ['👽', '🐛'], forest: ['👾', '🦎'], tundra: ['🤖', '👽'], rock: ['🦎', '💎'],
-    },
-    flora: { ocean: '', ice: '💠', beach: '💎', desert: '🪨', grass: '🌿', forest: '🍄', tundra: '🪨', rock: '🗿' },
-    sky: { day: ['#5fe0a8', '#e2ffd8'], night: ['#02120d', '#0d3a2a'] },
-  },
 };
 
 class Life {
@@ -294,6 +276,7 @@ class Life {
       }
       ctx.globalAlpha = 1;
     }
+    if (this.decorate) this.decorate(ctx, row, col, W, H, ys[W >> 1]); // [FEATURE] war, outbreak, flood, fire, ruins…
     // marker for the inspected point (centre)
     ctx.strokeStyle = '#ffb347'; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);

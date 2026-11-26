@@ -28,7 +28,11 @@
   const life = new Life(planet, renderer, view);
   const dis = new Disasters(planet, life);
   renderer.damage = dis.damage; renderer.dtype = dis.dtype;
-  renderer.overlay = (ctx) => { drawSun(ctx); life.draw(ctx); dis.draw(ctx); drawClock(ctx); };
+  const world = new World(planet, life, dis); // [FEATURE] nations, war, pandemics, human impact, cataclysms
+  renderer.world = world;
+  life.decorate = (ctx, row, col, W, H, gy) => world.decorateScene(ctx, row, col, W, H, gy);
+  let sunPos = null;
+  renderer.overlay = (ctx) => { drawSun(ctx); life.draw(ctx); dis.draw(ctx); world.draw(ctx, (r, c) => life.project(r, c), renderer, sunPos); drawClock(ctx); };
   const state = {
     paused: false,
     needClassify: false,
@@ -42,8 +46,8 @@
   // ---------- helpers ----------
   const readClimate = () => ({
     ocean: Number(el.ocean.value) / 100,
-    temp: Number(el.temp.value),
-    moisture: Number(el.moisture.value) / 100,
+    temp: Number(el.temp.value) + (world.ready ? world.warming : 0),       // [FEATURE] human-driven warming
+    moisture: Number(el.moisture.value) / 100 - (world.ready ? world.drying : 0),
     meltRaisesSea: el.melt.checked,
   });
 
@@ -102,6 +106,7 @@
         if (life.game) life.stopGame(false);
         dis.clear(); el.reportWrap.hidden = true; el.recover.disabled = true; lastReport = null;
         life.populate(10);
+        world.build(); onWorldBuilt();
         refreshInfo();
         writeHash();
       } catch (err) {
@@ -115,6 +120,7 @@
   function reclassify() {
     if (!planet.seed) return;
     planet.classify(readClimate());
+    if (world.ready) world.refreshStats(false);
     refreshInfo();
     writeHash();
   }
@@ -396,9 +402,10 @@
       const p = toCanvas(e);
       const hit = renderer.pick(p.x, p.y, view);
       if (hit && armedKey && !life.game) { doStrike(hit); return; } // [FIX B3]
+      if (hit && plagueArmed && !life.game) { releasePlague(hit); return; }
       state.inspected = hit;
       renderer.marker = hit;
-      if (hit) { Sfx.inspect(); refreshInspect(); }
+      if (hit) { Sfx.inspect(); world.sel = world.regionAt(hit.row, hit.col); world.highlightCity = null; refreshInspect(); renderRegionCard(); }
       else { el.inspect.classList.add('muted'); el.inspect.textContent = 'That’s space. Click the planet to inspect a spot.'; }
     }
   }
@@ -486,6 +493,10 @@
     if (state.needClassify) { state.needClassify = false; reclassify(); }
     life.update(state.paused ? 0 : dt);
     const prog = dis.update(state.paused ? 0 : dt); // [FIX B12]
+    const yrs = state.paused ? 0 : dt * state.yearsPerSec;
+    world.update(state.paused ? 0 : dt, yrs);
+    if (world.ready && Math.abs(world.warming - (state.lastWarm || 0)) > 0.08) { state.lastWarm = world.warming; state.needClassify = true; }
+    if (world.doom && world.doom.applied && el.rebuild.hidden) { el.rebuild.hidden = false; renderRegionCard(); }
     if (prog && lastReport) { el.report.innerHTML = disasterReportHTML(lastReport, prog); if (prog.done) onRecovered(); }
 
     if (!state.paused) {
@@ -506,7 +517,7 @@
     view.cloudShift = cs;
 
     // keep the inspector's day/night line in sync, cheaply
-    if (state.inspected && now - inspectTimer > 500) { inspectTimer = now; refreshInspect(); }
+    if (now - inspectTimer > 500) { inspectTimer = now; if (state.inspected) refreshInspect(); renderRegionCard(); renderWorldStats(); }
     } catch (err) { console.error(err); }
     requestAnimationFrame(frame);
   }
@@ -648,6 +659,7 @@
     armedKey = null; syncDisasterUI();
     if (!rep) return;
     lastReport = rep;
+    world.onStrike(rep);
     if (rep.coolC > 0) {               // impact / volcanic winter cools the planet
       const t = Number(el.temp.value);
       setSlider(el.temp, t - rep.coolC);
@@ -672,34 +684,67 @@
   syncDisasterUI();
 
   // ---------- sun + clock ----------
+  // [FEATURE] A proper sun: white-hot core with limb darkening, layered corona, slowly turning rays
+  // and a lens flare. Hidden when it is behind the camera; an eclipse halo when it is behind the planet.
+  function paintSun(ctx, px, py, s, alpha) {
+    const t = performance.now() / 1000;
+    ctx.save(); ctx.globalAlpha = alpha; ctx.globalCompositeOperation = 'lighter';
+    const halo = ctx.createRadialGradient(px, py, 0, px, py, s * 6);
+    halo.addColorStop(0, 'rgba(255,214,140,0.55)'); halo.addColorStop(0.25, 'rgba(255,170,60,0.16)'); halo.addColorStop(1, 'rgba(255,140,40,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(px, py, s * 6, 0, 6.283); ctx.fill();
+    ctx.translate(px, py); ctx.rotate(t * 0.05);
+    for (let k = 0; k < 12; k++) { // soft rays
+      ctx.rotate(Math.PI / 6);
+      const len = s * (3.2 + 0.8 * Math.sin(t * 0.7 + k * 1.7));
+      const g = ctx.createLinearGradient(0, 0, len, 0); g.addColorStop(0, 'rgba(255,230,170,0.22)'); g.addColorStop(1, 'rgba(255,200,120,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, -s * 0.18); ctx.lineTo(len, 0); ctx.lineTo(0, s * 0.18); ctx.fill();
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
+    const core = ctx.createRadialGradient(px - s * 0.25, py - s * 0.25, 0, px, py, s);
+    core.addColorStop(0, '#ffffff'); core.addColorStop(0.55, '#fff4cf'); core.addColorStop(0.85, '#ffd36b'); core.addColorStop(1, 'rgba(255,170,60,0.9)');
+    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(px, py, s, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
   function drawSun(ctx) {
     if (!planet.seed) return;
     const lat = view.sunDec, lon = view.sunLon;
     if (renderer.mode === 'map') {
       let u = lon / (Math.PI * 2) + 0.5; u -= Math.floor(u);
-      const x = u * MAP_W, y = (0.5 - lat / Math.PI) * MAP_H;
-      ctx.save(); ctx.font = '18px system-ui, "Apple Color Emoji", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('☀️', x, y); ctx.restore();
+      paintSun(ctx, u * MAP_W, (0.5 - lat / Math.PI) * MAP_H, 7, 0.95);
       return;
     }
     if (!renderer.R) return;
-    // sun direction in view space
+    // sun direction in view space (z toward the viewer)
     const l0 = lon - view.yaw;
     const x2 = Math.cos(lat) * Math.sin(l0), y2 = Math.sin(lat), z2 = Math.cos(lat) * Math.cos(l0);
     const ct = Math.cos(renderer.tilt), st = Math.sin(renderer.tilt);
     const sy = y2 * ct - z2 * st, sz = y2 * st + z2 * ct;
-    let len = Math.hypot(x2, sy);
-    let dx = len > 0.05 ? x2 / len : 0.7, dy = len > 0.05 ? sy / len : 0.7;
-    const W = renderer.canvas.width;
-    const dist = Math.min(renderer.R * 1.22, W / 2 - 34);
-    const px = renderer.cx + dx * dist, py = renderer.cy - dy * dist;
-    const behind = sz < -0.2 && len < 0.6;           // sun hidden behind the planet
-    ctx.save();
-    ctx.globalAlpha = behind ? 0.35 : 1;
-    const g = ctx.createRadialGradient(px, py, 2, px, py, 34);
-    g.addColorStop(0, 'rgba(255,250,220,1)'); g.addColorStop(0.35, 'rgba(255,210,90,0.9)'); g.addColorStop(1, 'rgba(255,170,40,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, 34, 0, 6.283); ctx.fill();
-    ctx.restore();
+    const len = Math.hypot(x2, sy);
+    const W = renderer.canvas.width, R = renderer.R, cx = renderer.cx, cy = renderer.cy;
+    if (sz > 0.9) return;                                   // behind the camera: we see the lit face, not the sun
+    if (sz < -0.88 || len < 0.2) {                          // directly behind the planet: eclipse halo
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(cx, cy, R * 0.98, cx, cy, R * 1.5);
+      g.addColorStop(0, 'rgba(255,220,160,0.55)'); g.addColorStop(0.25, 'rgba(255,180,90,0.18)'); g.addColorStop(1, 'rgba(255,150,60,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 1.5, 0, 6.283); ctx.fill(); ctx.restore();
+      return;
+    }
+    const dx = x2 / len, dy = sy / len;
+    // place it well clear of the globe; partly occluded when it sits behind the planet
+    const dist = Math.min(R + 26 + 140 * len, W / 2 - 30);
+    const px = cx + dx * dist, py = cy - dy * dist;
+    const s = 14 * (W / 800);
+    const behind = sz < 0 && dist < R + s;
+    sunPos = { x: px, y: py };
+    paintSun(ctx, px, py, s, behind ? 0.35 : 1);
+    if (!behind) { // lens flare: faint discs along the line through the planet centre
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      [[0.55, 10, 'rgba(120,170,255,0.10)'], [1.25, 18, 'rgba(255,200,120,0.08)'], [1.7, 7, 'rgba(160,255,200,0.10)']].forEach(([k, r, c]) => {
+        const fx = px + (cx - px) * k * 2, fy = py + (cy - py) * k * 2;
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(fx, fy, r * (W / 800), 0, 6.283); ctx.fill();
+      });
+      ctx.restore();
+    }
   }
   function drawClock(ctx) {
     if (!planet.seed) return;
@@ -718,6 +763,161 @@
     ctx.fillText(`${renderer.mode === 'map' ? 'at 0° longitude' : 'at view centre'} · ${season}`, W - 18, 36);
     ctx.restore();
   }
+
+  // ---------- [FEATURE] world simulation UI ----------
+  el.rebuild = $('rebuild');
+  const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const fmtPop = (n) => (n >= 1e9 ? (n / 1e9).toFixed(2) + ' bn' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' m' : n >= 1e3 ? Math.round(n / 1e3) + ' k' : String(Math.round(n)));
+  const meter = (v, col) => `<div class="meter"><i style="width:${Math.max(0, Math.min(100, v)).toFixed(0)}%;background:${col}"></i></div>`;
+  const toneCol = (v) => (v >= 66 ? 'var(--green)' : v >= 40 ? 'var(--orange)' : 'var(--red)');
+  state.yearsPerSec = 0;
+  let plagueArmed = false, kind = 'Virus';
+
+  function onWorldBuilt() {
+    el.rebuild.hidden = true; state.lastWarm = 0;
+    const opts = world.regions.map((r, k) => `<option value="${k}">${r.flag} ${esc(r.name)}</option>`).join('');
+    $('warA').innerHTML = opts; $('warB').innerHTML = opts;
+    if (world.regions.length > 1) $('warB').value = '1';
+    const places = [];
+    world.regions.forEach((r) => { places.push(r.name); r.cities.forEach((c) => places.push(c.name)); });
+    $('places').innerHTML = places.map((p) => `<option value="${esc(p)}"></option>`).join('');
+    renderWars(); renderRegionCard(); renderWorldStats(); updatePlagueStatus();
+  }
+
+  function renderRegionCard() {
+    const card = $('regionCard'), r = world.regions[world.sel];
+    if (!world.ready || !r) { card.hidden = true; return; }
+    card.hidden = false;
+    const m = world.mood(r), w = world.weather(r), eco = world.economyLabel(r), op = world.opinionOf(r.id);
+    const enemies = [...r.atWar].map((k) => world.regions[k].flag + ' ' + esc(world.regions[k].name)).join(', ');
+    const inf = r.pop > 0 ? r.infected / r.pop : 0;
+    const pills = [];
+    if (r.atWar.size) pills.push(['bad', '⚔️ At war']);
+    if (r.lockdown) pills.push(['bad', '🔒 Lockdown']); else if (r.masks) pills.push(['', '😷 Masks advised']);
+    if (r.water < 0.25) pills.push(['bad', '🏜️ Water shortage']);
+    if (r.crops < 0.3) pills.push(['bad', '🌾 Crop failure']); else if (r.crops > 0.7) pills.push(['good', '🌾 Good harvests']);
+    if (r.shock > 20) pills.push(['bad', '🕯️ Mourning']);
+    card.innerHTML = `
+      <div class="rc-head"><span class="flag">${r.flag}</span><div><div class="rc-name">${esc(r.name)}</div><div class="rc-gov">${esc(r.gov)} · ${eco.govState}</div></div></div>
+      <div class="kpis"><div class="kpi"><div class="v">${fmtPop(r.pop)}</div><div class="k">population</div></div><div class="kpi"><div class="v" style="color:#ff6961">${fmtPop(r.dead)}</div><div class="k">deaths</div></div></div>
+      <div class="mood"><span class="e">${m.emoji}</span><div class="l"><b>People feel: ${m.label}</b>${meter(m.v, toneCol(m.v))}</div></div>
+      <div class="rc-row"><span>Public approval of government</span><b>${r.approval.toFixed(0)}%</b></div>${meter(r.approval, toneCol(r.approval))}
+      <div class="rc-row"><span>Economy</span><b>${r.economy.toFixed(0)}/100 · ${eco.trend}</b></div>${meter(r.economy, toneCol(r.economy))}
+      <div class="rc-row"><span>Weather now</span><b>${w.emoji} ${w.text}</b></div>
+      <div class="rc-row"><span>Crops</span><b>${(r.crops * 100).toFixed(0)}%</b></div>${meter(r.crops * 100, toneCol(r.crops * 100))}
+      <div class="rc-row"><span>Fresh water</span><b>${(r.water * 100).toFixed(0)}%</b></div>${meter(r.water * 100, toneCol(r.water * 100))}
+      ${enemies ? `<div class="rc-row"><span>At war with</span><b>${enemies}</b></div>` : ''}
+      ${op && op.hostile ? `<div class="rc-row"><span>Public opinion is most hostile to</span><b>${op.hostile.flag} ${esc(op.hostile.name)} (${op.hostileV.toFixed(0)})</b></div>` : ''}
+      ${op && op.friend ? `<div class="rc-row"><span>…and warmest toward</span><b>${op.friend.flag} ${esc(op.friend.name)} (+${op.friendV.toFixed(0)})</b></div>` : ''}
+      ${world.plague && (r.infected > 0.5 || r.recovered > 0) ? `<div class="rc-row"><span>${esc(world.plague.name)}</span><b>${fmtPop(r.infected)} sick · ${fmtPop(r.plagueDead)} dead</b></div>` : ''}
+      ${r.cities.length ? `<div class="rc-row"><span>Cities</span><b>${r.cities.slice(0, 6).map((c) => esc(c.name)).join(', ')}</b></div>` : ''}
+      <div class="tagrow">${pills.map(([k, t]) => `<span class="tag-pill ${k}">${t}</span>`).join('')}</div>`;
+  }
+
+  function renderWorldStats() {
+    if (!world.ready) return;
+    const items = [
+      ['📅', `Year ${Math.floor(world.year)}`, 'since start'], ['👥', fmtPop(world.worldPop), 'people alive'],
+      ['🪦', fmtPop(world.worldDead), 'deaths'], ['🌡️', `+${world.warming.toFixed(2)} °C`, 'human warming'],
+      ['🦋', `${world.wildlife.toFixed(0)}%`, 'wildlife left'], ['🧬', fmtPop(world.speciesLost), 'species lost'],
+      ['💧', `${Math.max(0, 100 - world.drying * 250).toFixed(0)}%`, 'fresh water'], ['⚔️', String(world.wars.length), 'active wars'],
+    ];
+    $('worldStats').innerHTML = items.map(([e, v, k]) => `<div class="kpi"><div class="v">${e} ${v}</div><div class="k">${k}</div></div>`).join('');
+    updatePlagueStatus();
+  }
+
+  function renderWars() {
+    $('warList').innerHTML = world.wars.map((w, k) => `<div class="row"><span>${world.regions[w.a].flag} ${esc(world.regions[w.a].name)} ⚔️ ${world.regions[w.b].flag} ${esc(world.regions[w.b].name)}</span><button type="button" data-k="${k}">🕊️ Peace</button></div>`).join('');
+    $('warList').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const w = world.wars[Number(b.dataset.k)]; if (w) world.makePeace(w.a, w.b); renderWars(); renderRegionCard(); }));
+  }
+  $('declareWar').addEventListener('click', () => {
+    if (!world.ready) return;
+    const a = Number($('warA').value), b = Number($('warB').value);
+    if (a === b) { flash('Pick two different nations.'); return; }
+    if (world.doom) { flash('The planet is gone. Make a new one first.'); return; }
+    if (!world.declareWar(a, b)) { flash('They are already at war.'); return; }
+    Sfx.disaster('quake');
+    if (state.yearsPerSec === 0) setSpeed(2);
+    world.sel = a; renderWars(); renderRegionCard();
+    flash(`${world.regions[a].name} declared war on ${world.regions[b].name}. Time is running so you can watch it unfold.`);
+  });
+
+  function setSpeed(v) {
+    state.yearsPerSec = v;
+    for (const b of $('timeSpeed').children) b.classList.toggle('on', Number(b.dataset.v) === v);
+  }
+  for (const b of $('timeSpeed').children) b.addEventListener('click', () => setSpeed(Number(b.dataset.v)));
+
+  const syncLab = () => {
+    $('pR0Out').textContent = Number($('pR0').value).toFixed(1);
+    $('pLethOut').textContent = (Number($('pLeth').value) / 2).toFixed(1) + '%';
+    $('pCureOut').textContent = $('pCure').value + '/10';
+  };
+  ['pR0', 'pLeth', 'pCure'].forEach((id) => $(id).addEventListener('input', syncLab)); syncLab();
+  for (const b of $('pKind').children) b.addEventListener('click', () => { kind = b.dataset.v; for (const c of $('pKind').children) c.classList.toggle('on', c === b); });
+  $('releasePlague').addEventListener('click', () => {
+    if (!world.ready || life.game) return;
+    plagueArmed = !plagueArmed;
+    $('releasePlague').classList.toggle('active', plagueArmed);
+    $('releasePlague').textContent = plagueArmed ? '🧪 Armed: click where it starts (Esc cancels)' : '🧪 Release: then click the planet';
+  });
+  document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && plagueArmed) { plagueArmed = false; $('releasePlague').click(); $('releasePlague').click(); } });
+  function releasePlague(hit) {
+    plagueArmed = false; $('releasePlague').classList.remove('active'); $('releasePlague').textContent = '🧪 Release: then click the planet';
+    const cfg = { name: ($('pName').value || 'Unknown').trim().slice(0, 24) || 'Unknown', kind, r0: Number($('pR0').value), lethality: Number($('pLeth').value) / 200, cureDifficulty: Number($('pCure').value), air: $('pAir').checked, land: $('pLand').checked, water: $('pWater').checked };
+    if (!world.release(cfg, hit.row, hit.col)) { flash('Release it on land where people live.'); return; }
+    Sfx.asleep();
+    world.sel = world.regionAt(hit.row, hit.col); state.inspected = hit; renderer.marker = hit;
+    if (state.yearsPerSec === 0) setSpeed(2);
+    flash(`${cfg.name} released in ${world.regions[world.sel].name}.`);
+    renderRegionCard(); refreshInspect();
+  }
+  function updatePlagueStatus() {
+    const p = world.plague, out = $('plagueStatus');
+    if (!p) { out.textContent = ''; return; }
+    const sick = world.regions.reduce((s, r) => s + r.infected, 0), hit = world.regions.filter((r) => r.infected > 0.5 || r.recovered > 0).length;
+    out.textContent = `${p.kind} “${p.name}”: ${fmtPop(sick)} sick now · ${fmtPop(p.totalDead)} dead · ${hit} nations reached · vaccine ${p.vaccine.toFixed(0)}%`;
+  }
+
+  for (const b of $('dooms').children) b.addEventListener('click', () => {
+    if (!world.ready || life.game) return;
+    if (!world.startDoom(b.dataset.v)) { flash('The planet is already doomed.'); return; }
+    if (b.dataset.v !== 'meteors') { setView('globe'); }
+    Sfx.disaster(b.dataset.v === 'meteors' ? 'asteroid' : 'volcano');
+    flash({ meteors: 'A meteor storm is hitting the planet…', collision: 'A rogue planet is on a collision course…', supernova: 'The sun is going supernova…', blackhole: 'A black hole is passing close by…' }[b.dataset.v]);
+  });
+  world.onMeteor = () => {
+    const row = Math.floor(MAP_H * (0.15 + Math.random() * 0.7)), col = Math.floor(Math.random() * MAP_W);
+    const rep = dis.strike('asteroid', 5 + Math.floor(Math.random() * 4), row, col);
+    if (rep) { world.onStrike(rep); lastReport = rep; el.reportWrap.hidden = false; el.report.innerHTML = disasterReportHTML(rep, null); Sfx.disaster('asteroid'); }
+  };
+  el.rebuild.addEventListener('click', () => { el.seed.value = randomSeed(); generate(); });
+
+  $('realEarth').addEventListener('click', () => {
+    stopTimelapse(); undoWinter();
+    setSlider(el.ocean, 71); setSlider(el.temp, 0); setSlider(el.moisture, 0); setSlider(el.rough, 50);
+    if (planet.theme !== 'earth') setTheme('earth', true);
+    updateLabels(); el.seed.value = 'Earth'; generate();
+  });
+
+  $('searchForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = $('search').value.trim().toLowerCase(), msg = $('searchMsg');
+    if (!q || !world.ready) return;
+    let found = null;
+    for (const r of world.regions) for (const c of r.cities) if (!found && c.name.toLowerCase() === q) found = { r, c };
+    if (!found) for (const r of world.regions) if (!found && r.name.toLowerCase() === q) found = { r, c: null };
+    if (!found) for (const r of world.regions) for (const c of r.cities) if (!found && c.name.toLowerCase().startsWith(q)) found = { r, c };
+    if (!found) for (const r of world.regions) if (!found && r.name.toLowerCase().startsWith(q)) found = { r, c: null };
+    if (!found) { msg.textContent = planet.isEarth ? 'No match. Try a country or a major city.' : 'No match. On generated planets, search the nation names (or load the real Earth).'; return; }
+    const lon = found.c ? found.c.lon : found.r.lon, lat = found.c ? found.c.lat : found.r.lat;
+    setView('globe');
+    view.yaw = lon * Math.PI / 180; renderer.setTilt(lat * Math.PI / 180);
+    const hit = { row: Math.max(0, Math.min(MAP_H - 1, Math.floor((0.5 - lat / 180) * MAP_H))), col: Math.max(0, Math.min(MAP_W - 1, Math.floor((lon / 360 + 0.5) * MAP_W))) };
+    state.inspected = hit; renderer.marker = hit; world.sel = found.r.id; world.highlightCity = found.c ? found.c.name : null;
+    msg.textContent = found.c ? `${found.c.name}, ${found.r.name}` : found.r.name;
+    Sfx.inspect(); refreshInspect(); renderRegionCard();
+  });
 
   // ---------- boot ----------
   updateLabels();

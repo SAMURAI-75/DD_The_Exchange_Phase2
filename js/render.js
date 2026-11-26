@@ -136,6 +136,11 @@ class Renderer {
         r += 220 * glow * limb; g += 70 * glow * limb;
       }
     }
+    if (this.world && this.world.ready) { // [FEATURE] borders, selection, outbreaks, war fronts, human footprint, cataclysms
+      const c = this._rgb; c[0] = r; c[1] = g; c[2] = b;
+      this.world.shade(i, c, day * 0.9 + 0.1);
+      r = c[0]; g = c[1]; b = c[2];
+    }
     if (this.highlight >= 0 && P.biome[i] !== this.highlight) {
       const gray = (r + g + b) * 0.1; r = gray; g = gray; b = gray;
     }
@@ -144,7 +149,8 @@ class Renderer {
     const tw = 1 - Math.abs(light - 0.02) / 0.08;
     if (tw > 0) { r += 34 * tw * limb; g += 10 * tw * limb; }
 
-    if (view.cities) {
+    const doomed = this.world && this.world.doomAmt > 0.4 && this.world.doom.type !== 'meteors';
+    if (view.cities && !doomed) {
       const c = P.city[i];
       if (c && dm < 0.5) {
         const n = (1 - day) * (1 - dm * 2) * (c / 255) * limb;
@@ -152,7 +158,7 @@ class Renderer {
         r += cc[0] * n; g += cc[1] * n; b += cc[2] * n;
       }
     }
-    if (view.clouds) {
+    if (view.clouds && !doomed) {
       let cc = col + view.cloudShift;
       cc = ((cc % MAP_W) + MAP_W) % MAP_W;
       const cv = P.cloud[row * MAP_W + cc];
@@ -163,13 +169,17 @@ class Renderer {
         r = r * (1 - a) + ct[0] * cl * a; g = g * (1 - a) + ct[1] * cl * a; b = b * (1 - a) + ct[2] * cl * a;
       }
     }
-    r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
-    buf[o] = (255 << 24) | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0);
+    r = r > 255 ? 255 : r < 0 ? 0 : r; g = g > 255 ? 255 : g < 0 ? 0 : g; b = b > 255 ? 255 : b < 0 ? 0 : b;
+    buf[o] = (this._alpha << 24) | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0);
   }
 
   render(view) {
     if (!this.planet.seed) return;
     this._pal = this.planet.palette; // [perf] look the theme up once per frame, not per pixel
+    this._rgb = this._rgb || new Float32Array(3);
+    const W = this.world, consumed = W && W.doom && W.doom.type === 'blackhole';
+    this._alpha = consumed ? Math.max(0, Math.round(255 * (1 - W.doomAmt))) : 255;
+    if (W && W.vanished && this.mode === 'globe') { this.buf.fill(0); this.ctx.putImageData(this.image, 0, 0); if (this.overlay) this.overlay(this.ctx, view); return; }
     if (this.mode === 'globe') this._renderGlobe(view);
     else this._renderMap(view);
     this.ctx.putImageData(this.image, 0, 0);
