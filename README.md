@@ -1,6 +1,48 @@
 # Tiny Terra 🌍
 
-**Track IV: Living Worlds & Simulations, problem statement "Tiny Terra"**
+## Team Name
+RuReSa
+
+Members: Renya, Sriya
+
+## Track Number & Name
+Track IV: Living Worlds & Simulations
+
+## Problem Statement Name
+Tiny Terra
+
+## Idea
+Tiny Terra is a miniature planet generator. Type any seed and it creates a unique world with oceans, mountains, forests, deserts and snowy regions, which you can explore as a rotating 3D globe or a flat 2D map, with a moving day-and-night cycle. Sliders for temperature, water level, moisture and terrain roughness reshape the planet live, so you can see how a hot planet becomes a desert world or a cold one freezes over. To make every planet feel different, it has three world themes (Earth, Candy, Alien), themed creatures living in each biome, a side-view landscape preview of any spot, and "Creature Catcher", a mini-game where you fly around the planet catching creatures in daylight, with sound effects.
+
+## How to Run
+
+### Prerequisites
+- Any modern web browser (Chrome, Edge, Firefox or Safari).
+- Optional: Python 3, only if you prefer to run a local server.
+- No internet, API keys or package installs needed.
+
+### Installation
+No installation is needed. The project is plain HTML, CSS and JavaScript with no dependencies.
+
+### Commands to run locally
+```bash
+git clone https://github.com/renyapeter/RRS_The_Exchange.git
+cd RRS_The_Exchange
+```
+Then either open the page directly:
+```bash
+open index.html        # macOS
+start index.html       # Windows
+xdg-open index.html    # Linux
+```
+or run a local server:
+```bash
+python3 -m http.server 8000
+```
+and visit http://localhost:8000
+
+---
+
 
 A planet generator that builds miniature worlds from a seed. You can see each planet as a rotating 3D globe or a flat 2D map, watch day and night sweep across it, and reshape its climate live.
 
