@@ -811,7 +811,22 @@
       ${op && op.friend ? `<div class="rc-row"><span>…and warmest toward</span><b>${op.friend.flag} ${esc(op.friend.name)} (+${op.friendV.toFixed(0)})</b></div>` : ''}
       ${world.plague && (r.infected > 0.5 || r.recovered > 0) ? `<div class="rc-row"><span>${esc(world.plague.name)}</span><b>${fmtPop(r.infected)} sick · ${fmtPop(r.plagueDead)} dead</b></div>` : ''}
       ${r.cities.length ? `<div class="rc-row"><span>Cities</span><b>${r.cities.slice(0, 6).map((c) => esc(c.name)).join(', ')}</b></div>` : ''}
-      <div class="tagrow">${pills.map(([k, t]) => `<span class="tag-pill ${k}">${t}</span>`).join('')}</div>`;
+      <div class="tagrow">${pills.map(([k, t]) => `<span class="tag-pill ${k}">${t}</span>`).join('')}</div>
+      ${stanceHTML(r)}`;
+    card.querySelectorAll('[data-stance]').forEach((b) => b.addEventListener('click', () => {
+      const [wi, s] = b.dataset.stance.split(':').map(Number), w = world.wars[wi]; if (!w) return;
+      world.setStance(w, r.id, s); Sfx.click(); renderWars(); renderRegionCard();
+    }));
+  }
+  function stanceHTML(r) {
+    return world.wars.map((w, wi) => {
+      if (w.a === r.id || w.b === r.id) return '';
+      const A = world.regions[w.a], Bq = world.regions[w.b], cur = w.stance[r.id];
+      const opts = [[-2, `⚔️ Fight for ${A.flag}`], [-1, `🤝 Back ${A.flag}`], [0, '🕊️ Neutral'], [1, `🤝 Back ${Bq.flag}`], [2, `⚔️ Fight for ${Bq.flag}`]];
+      const now = cur === 0 ? 'neutral' : `${STANCE_LABEL[cur].toLowerCase()} ${(cur < 0 ? A : Bq).name}`;
+      return `<div class="rc-row"><span>Stance on ${A.flag} vs ${Bq.flag}</span><b>${esc(now)}</b></div>
+        <div class="stances">${opts.map(([v, t]) => `<button type="button" class="${v === cur ? 'on' : ''}" data-stance="${wi}:${v}">${t}</button>`).join('')}</div>`;
+    }).join('');
   }
 
   function renderWorldStats() {
@@ -827,7 +842,10 @@
   }
 
   function renderWars() {
-    $('warList').innerHTML = world.wars.map((w, k) => `<div class="row"><span>${world.regions[w.a].flag} ${esc(world.regions[w.a].name)} ⚔️ ${world.regions[w.b].flag} ${esc(world.regions[w.b].name)}</span><button type="button" data-k="${k}">🕊️ Peace</button></div>`).join('');
+    const flags = (list) => list.map((x) => (Math.abs(x.s) === 2 ? '⚔️' : '') + world.regions[x.k].flag).join(' ') || '—';
+    $('warList').innerHTML = world.wars.map((w, k) => { const sd = world.sides(w); return `<div class="row warrow"><div><b>${world.regions[w.a].flag} ${esc(world.regions[w.a].name)} ⚔️ ${world.regions[w.b].flag} ${esc(world.regions[w.b].name)}</b>
+      <div class="side">With ${esc(world.regions[w.a].name)}: ${flags(sd.A)}</div><div class="side">With ${esc(world.regions[w.b].name)}: ${flags(sd.B)}</div><div class="side">Neutral: ${sd.N.length} nations</div></div>
+      <button type="button" data-k="${k}">🕊️ Peace</button></div>`; }).join('');
     $('warList').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const w = world.wars[Number(b.dataset.k)]; if (w) world.makePeace(w.a, w.b); renderWars(); renderRegionCard(); }));
   }
   $('declareWar').addEventListener('click', () => {

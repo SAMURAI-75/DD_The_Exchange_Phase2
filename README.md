@@ -105,3 +105,18 @@ js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 - A newer generate request cancels an older one that hasn't finished.
 - Frame time is clamped, so switching tabs doesn't make the simulation jump.
 - Clipboard and download failures fall back gracefully.
+
+---
+
+## Phase 2 additions (team Ding Ding)
+
+- **18 bugs fixed** (see `Phase2_Bug_Report.docx`), including a share link that crashed the whole app.
+- **New look:** Apple-style frosted-glass panels floating over a full-screen starfield; sharper globe with ocean glint and atmosphere; a real sun (corona, rays, lens flare, eclipse halo).
+- **🌍 Real Earth:** one click loads Earth with hand-drawn coastlines, 56 countries (borders, flags, governments) and 90 real cities with lights. Search any country or city (e.g. *Bangalore*): the globe flies there and a card shows weather, population, how people feel, public approval, economy, crops, fresh water, wars and public opinion of other nations.
+- **Nations everywhere:** generated planets get their own named nations.
+- **⚔️ War:** pick two nations. Fronts burn, casualties mount, governments get a rally then war-weariness. Every other nation takes a stance (neutral, backs a side, or joins the fight) based on alliances, neighbours and opinion, and you can change any country's stance from its card.
+- **🧪 Pandemic lab:** design a pathogen (type, R₀, lethality, cure difficulty, air/land/water spread), release it anywhere and watch it spread while countries respond with masks, lockdowns and vaccines.
+- **⏩ Time & human impact:** fast-forward to watch population-driven warming, drying, deforestation, extinctions and lost wildlife.
+- **☄️ End of the world:** meteor storm, planet collision, the sun going supernova, or a black hole.
+- **Close-ups:** the landscape view shows what is happening at a spot: war zones, outbreaks, floods, fires, ruins, drought, doom.
+- Candy and Alien themes removed.

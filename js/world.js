@@ -3,6 +3,12 @@
 // wars, pandemics, human impact over time, and planet-ending cataclysms.
 'use strict';
 
+// Rough alliance blocs for the real Earth (everyone else starts non-aligned)
+const EARTH_BLOCS = {
+  west: ['United States', 'Canada', 'United Kingdom', 'France', 'Germany', 'Italy', 'Spain', 'Poland', 'Norway', 'Sweden', 'Finland', 'Iceland', 'Ireland', 'Japan', 'South Korea', 'Australia', 'New Zealand', 'Taiwan', 'Ukraine', 'Greenland', 'Turkey'],
+  east: ['Russia', 'China', 'North Korea', 'Iran', 'Cuba', 'Venezuela'],
+};
+const STANCE_LABEL = { '-2': 'Fighting alongside', '-1': 'Backing', '0': 'Neutral', '1': 'Backing', '2': 'Fighting alongside' };
 const GOVS = ['Parliamentary republic', 'Presidential republic', 'Constitutional monarchy', 'Federation', 'One-party state', 'Military junta', 'Theocracy', 'Direct democracy'];
 const NATION_SYL = ['ar', 'bel', 'cor', 'dan', 'el', 'fen', 'gar', 'hal', 'is', 'jor', 'kal', 'lor', 'mar', 'nor', 'os', 'pel', 'quin', 'ros', 'sal', 'tor', 'ul', 'var', 'wen', 'zan'];
 const NATION_END = ['ia', 'land', 'stan', 'or', 'ica', 'heim', 'ova', 'aria', 'ea', 'ar'];
@@ -87,7 +93,17 @@ class World {
       for (const j of [j1, j2]) { const b = this.region[j]; if (b !== 255 && b !== a) { this.border[i] = 1; this.adj[a][b]++; this.adj[b][a]++; } }
     }
     // initial views of other nations: mild, neighbours slightly warmer or cooler
-    this.views = Array.from({ length: R }, (_, a) => Float32Array.from({ length: R }, (_, b) => (a === b ? 100 : 10 + ((hashString(a + ':' + b) % 30) - 10))));
+    this.regions.forEach((r, k) => {
+      if (r.real) r.bloc = EARTH_BLOCS.west.includes(r.name) ? 'west' : EARTH_BLOCS.east.includes(r.name) ? 'east' : null;
+      else r.bloc = /one-party|junta|theocracy/i.test(r.gov) ? 'east' : /republic|democracy|monarchy/i.test(r.gov) && (hashString(r.name) % 3 !== 0) ? 'west' : null;
+    });
+    this.views = Array.from({ length: R }, (_, a) => Float32Array.from({ length: R }, (_, b) => {
+      if (a === b) return 100;
+      const A = this.regions[a], Bq = this.regions[b];
+      let v = 10 + ((hashString(a + ':' + b) % 30) - 10);
+      if (A.bloc && A.bloc === Bq.bloc) v += 40; else if (A.bloc && Bq.bloc) v -= 30;
+      return v;
+    }));
     this.refreshStats(true);
     this.ready = true;
   }
@@ -161,25 +177,68 @@ class World {
   }
 
   // ---------- war ----------
-  declareWar(a, b) {
+  declareWar(a, b, cascade = true) {
     if (a === b || a < 0 || b < 0 || this.doom) return false;
     const A = this.regions[a], B = this.regions[b];
     if (A.atWar.has(b)) return false;
     A.atWar.add(b); B.atWar.add(a);
-    this.wars.push({ a, b, since: this.year });
+    if (!cascade) { this.views[a][b] = Math.min(this.views[a][b], -70); this.views[b][a] = Math.min(this.views[b][a], -70); this._markFront(a, b); return true; }
+    const war = { a, b, since: this.year, stance: new Int8Array(this.regions.length), joined: [] };
+    this.wars.push(war);
     this.views[a][b] = -90; this.views[b][a] = -95;
-    this.regions.forEach((c, k) => { // the world reacts to the aggressor
+    A.approval += 8; B.approval += 12;   // rally-round-the-flag at first
+    this._markFront(a, b);
+    this.events.push({ t: 0, type: 'war', a, b });
+    // [FEATURE] every other nation takes a stance: neutral, backing a side, or joining the fight
+    this.regions.forEach((c, k) => {
+      if (k === a || k === b || c.pop < 1) return;
+      let lean = this.views[k][b] - this.views[k][a];                  // + means pro-defender
+      if (c.bloc && c.bloc === B.bloc) lean += 30; if (c.bloc && c.bloc === A.bloc) lean -= 30;
+      if (this.adj[k][a] > 0) lean += 12;                              // the aggressor next door is scary
+      const side = lean > 0 ? 1 : -1, mag = Math.abs(lean);
+      let s = mag < 40 ? 0 : side;
+      const ally = side > 0 ? B : A, enemyK = side > 0 ? a : b;
+      if (mag > 95 && ((c.bloc && c.bloc === ally.bloc) || this.adj[k][enemyK] > 0) && c.econ0 > 35 && (hashString(k + 'j' + a + b) % 100) < 30) s = side * 2;
+      this.setStance(war, k, s, true);
+    });
+    this.regions.forEach((c, k) => { // then opinion shifts against the aggressor
       if (k === a || k === b) return;
       this.views[k][a] -= this.adj[k][b] > 0 ? 30 : 15; this.views[k][b] += this.adj[k][a] > 0 ? 5 : 8;
       if (this.adj[k][a] > 0 || this.adj[k][b] > 0) c.shock += 12;   // neighbours fear spill-over and refugees
     });
-    A.approval += 8; B.approval += 12;   // rally-round-the-flag at first
-    this._markFront(a, b);
-    this.events.push({ t: 0, type: 'war', a, b });
     return true;
+  }
+  // stance: -2 fight for a, -1 back a, 0 neutral, 1 back b, 2 fight for b
+  setStance(war, k, s, initial) {
+    const prev = war.stance[k], c = this.regions[k];
+    if (prev === s && !initial) return;
+    if (Math.abs(prev) === 2) { const enemy = prev > 0 ? war.a : war.b; c.atWar.delete(enemy); this.regions[enemy].atWar.delete(k); war.joined = war.joined.filter((j) => j.c !== k); }
+    war.stance[k] = s;
+    if (s === 0) return;
+    const enemy = s > 0 ? war.a : war.b, friend = s > 0 ? war.b : war.a;
+    this.views[k][enemy] = Math.min(this.views[k][enemy], s === 2 || s === -2 ? -80 : -40);
+    this.views[enemy][k] -= 25; this.views[friend][k] += 20; this.views[k][friend] += 10;
+    c.economy -= Math.abs(s) === 2 ? 6 : 2; // aid, sanctions or mobilisation cost
+    if (Math.abs(s) === 2) { this.declareWar(k, enemy, false); war.joined.push({ c: k, enemy }); }
+  }
+  sides(war) {
+    const A = [], Bs = [], N = [];
+    war.stance.forEach((s, k) => { if (k === war.a || k === war.b || this.regions[k].pop < 1) return; (s < 0 ? A : s > 0 ? Bs : N).push({ k, s }); });
+    return { A, B: Bs, N };
+  }
+  supportOf(k) { // how much outside help nation k gets across all its wars
+    let m = 1;
+    for (const w of this.wars) {
+      const side = k === w.a ? -1 : k === w.b ? 1 : w.stance[k] < 0 ? -1 : w.stance[k] > 0 ? 1 : 0;
+      if (!side) continue;
+      w.stance.forEach((s, c) => { if (c !== k && Math.sign(s) === side) m += Math.abs(s) === 2 ? 0.25 : 0.1; });
+    }
+    return Math.min(2.5, m);
   }
   makePeace(a, b) {
     const A = this.regions[a], B = this.regions[b];
+    const w = this.wars.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+    if (w) for (const j of w.joined) { this.regions[j.c].atWar.delete(j.enemy); this.regions[j.enemy].atWar.delete(j.c); }
     A.atWar.delete(b); B.atWar.delete(a);
     this.wars = this.wars.filter((w) => !((w.a === a && w.b === b) || (w.a === b && w.b === a)));
     this.views[a][b] = Math.max(this.views[a][b], -40); this.views[b][a] = Math.max(this.views[b][a], -40);
@@ -301,7 +360,7 @@ class World {
       if (war) {
         r.warYears += dt;
         for (const b of r.atWar) {
-          const E = this.regions[b], ratio = Math.min(3, (E.pop * (E.economy + 10)) / Math.max(1, r.pop * (r.economy + 10)));
+          const E = this.regions[b], ratio = Math.min(3, (E.pop * (E.economy + 10) * this.supportOf(b)) / Math.max(1, r.pop * (r.economy + 10) * this.supportOf(k)));
           const d = Math.min(r.pop, r.pop * 0.0025 * ratio * dt);
           r.pop -= d; r.dead += d; r.warDead += d;
         }
@@ -454,7 +513,8 @@ class World {
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sp.x, sp.y, r0 * 2.2, 0, 6.283); ctx.fill();
       if (t > 2.6 && t < 5) { const a = 1 - (t - 2.6) / 2.4; ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`; ctx.fillRect(0, 0, W, W); ctx.strokeStyle = `rgba(180,220,255,${a})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(sp.x, sp.y, (t - 2.6) * W * 0.6, 0, 6.283); ctx.stroke(); }
     } else if (d.type === 'blackhole') {
-      const k = Math.min(1, t / 2.5), bx = cx + R * 1.55, by = cy + R * 0.15, br = R * 0.42 * (0.4 + 0.6 * k);
+      const k = Math.min(1, t / 2.5), brMax = Math.min(R * 0.32, W * 0.09), br = brMax * (0.4 + 0.6 * k);
+      const bx = W - brMax * 2.3 - 8, by = brMax * 1.4 + 8; // top-right corner, inside the view
       ctx.translate(bx, by); ctx.rotate(t * 0.6);
       for (let ring = 0; ring < 3; ring++) { // accretion disk
         ctx.strokeStyle = `rgba(255,${150 + ring * 40},${60 + ring * 50},${0.55 - ring * 0.12})`; ctx.lineWidth = br * (0.18 - ring * 0.04);

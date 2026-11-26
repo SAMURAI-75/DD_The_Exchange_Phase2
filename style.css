@@ -257,3 +257,9 @@ select {
 .tag-pill.good { background: rgba(48,209,88,.2); color: #7ee2a0; }
 .wstats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .wstats .kpi .v { font-size: 16px; }
+
+.warrow { align-items: flex-start; }
+.warrow .side { color: var(--text2); font-size: 11px; margin-top: 3px; line-height: 1.5; }
+.stances { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; }
+.stances button { padding: 4px 7px; font-size: 11px; border-radius: 8px; }
+.stances button.on { background: var(--blue); color: #fff; }
