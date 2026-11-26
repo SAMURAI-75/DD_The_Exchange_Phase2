@@ -441,6 +441,7 @@ class World {
     if (pl && totalInf > 0) {
       const effort = this.regions.reduce((s, r) => s + (r.infected > 0 ? r.economy : 0), 0) / Math.max(1, this.regions.length);
       pl.vaccine = Math.min(100, pl.vaccine + dt * 365 * (0.12 + effort * 0.01) / pl.cureDifficulty);
+      if (pl.vaccine >= 100 && !pl.cured && this.regions.reduce((s, r) => s + r.infected, 0) < 1) { pl.cured = this.year; pl.curedAt = performance.now(); } // [FEATURE] cured
       if (pl.vaccine >= 100) for (const r of this.regions) { const S = Math.max(0, r.pop - r.infected - r.recovered - r.vaccinated); r.vaccinated += S * Math.min(1, dt * 365 * 0.004 * (0.4 + r.economy / 100)); }
     }
   }
@@ -560,8 +561,11 @@ class World {
   _drawSpread(ctx, renderer) {
     const t = performance.now() / 1000;
     ctx.save(); ctx.lineCap = 'round';
-    const recent = this.spreads.filter((s) => s.route === 'origin' || s.t < 14).slice(-30); // [UI] keep the globe readable
-    for (const s of recent) {
+    // [FEATURE] every route stays on the globe until the disease is cured, then they all fade out
+    const pl = this.plague, gone = pl && pl.cured ? Math.min(1, (performance.now() - pl.curedAt) / 4000) : 0;
+    if (gone >= 1) { ctx.restore(); return; }
+    ctx.globalAlpha = 1 - gone;
+    for (const s of this.spreads) {
       if (s.route === 'origin') { const o = this.regions[s.a], p = this._proj(renderer, o.lon, o.lat); if (p) { const pulse = (t % 1.6) / 1.6; ctx.strokeStyle = `rgba(255,69,58,${1 - pulse})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 6 + pulse * 22, 0, 6.283); ctx.stroke(); } continue; }
       const A = this.regions[s.a], Bq = this.regions[s.b];
       const pts = []; // sample the great circle between the two countries, lifted into an arc
@@ -572,14 +576,14 @@ class World {
         pts.push({ x: p.x, y: p.y - lift });
       }
       const fresh = Math.max(0, 1 - s.t / 6);
-      const fade = Math.min(1, (14 - s.t) / 8); ctx.strokeStyle = `rgba(255,69,58,${(0.12 + 0.68 * fresh) * fade})`; ctx.lineWidth = 1 + 1.5 * fresh;
+      ctx.strokeStyle = `rgba(255,69,58,${0.32 + 0.5 * fresh})`; ctx.lineWidth = 1 + 1.5 * fresh;
       ctx.setLineDash(s.route === 'land' ? [4, 4] : []); ctx.lineDashOffset = -t * 20;
       ctx.beginPath(); let started = false;
       for (const p of pts) { if (!p) { started = false; continue; } if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y); }
       ctx.stroke(); ctx.setLineDash([]);
       if (fresh > 0) { // the traveller
         const idx = Math.min(24, Math.floor(((s.t * 0.5) % 1) * 25)), p = pts[idx];
-        if (p) { ctx.font = s.route === 'air' ? '14px system-ui, "Apple Color Emoji"' : '12px system-ui, "Apple Color Emoji"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = fresh; ctx.fillText(s.route === 'air' ? '✈️' : '🦠', p.x, p.y); ctx.globalAlpha = 1; }
+        if (p) { ctx.font = s.route === 'air' ? '14px system-ui, "Apple Color Emoji"' : '12px system-ui, "Apple Color Emoji"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const ga = ctx.globalAlpha; ctx.globalAlpha = ga * fresh; ctx.fillText(s.route === 'air' ? '✈️' : '🦠', p.x, p.y); ctx.globalAlpha = ga; }
       }
     }
     ctx.restore();

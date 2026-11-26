@@ -909,7 +909,7 @@
     if (!p) { out.textContent = ''; return; }
     const sick = world.regions.reduce((s, r) => s + r.infected, 0), hit = world.regions.filter((r) => r.infected > 0.5 || r.recovered > 0).length;
     const top = world.regions.filter((r) => r.cases > 0).sort((a, b) => b.cases - a.cases).slice(0, 5);
-    out.innerHTML = `<b>${esc(p.kind)} “${esc(p.name)}”</b>: ${fmtPop(world.regions.reduce((s, r) => s + (r.cases || 0), 0))} cases so far · ${fmtPop(sick)} sick now · ${fmtPop(p.totalDead)} dead · ${hit} nations · vaccine ${p.vaccine.toFixed(0)}%` +
+    out.innerHTML = `<b>${esc(p.kind)} “${esc(p.name)}”</b>${p.cured != null ? ` <span style="color:var(--green)">✅ cured in year ${Math.floor(p.cured)}</span>` : ''}: ${fmtPop(world.regions.reduce((s, r) => s + (r.cases || 0), 0))} cases in total · ${fmtPop(sick)} sick now · ${fmtPop(p.totalDead)} dead · ${hit} nations · vaccine ${p.vaccine.toFixed(0)}%` +
       (top.length ? `<div class="toplist">${top.map((r) => `<span>${r.flag} ${esc(r.name)} <b>${fmtPop(r.cases)}</b></span>`).join('')}</div>` : '');
   }
 
