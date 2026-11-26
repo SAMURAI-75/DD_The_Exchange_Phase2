@@ -2,7 +2,7 @@
 // moving day/night terminator, drifting clouds and night-side city lights.
 'use strict';
 
-const GLOBE_SIZE = 600;
+const GLOBE_SIZE = 800; // [UI] sharper globe (was 600)
 // damage tint per disaster type id (1 asteroid, 2 quake, 3 tsunami, 4 volcano, 5 wildfire)
 const DISASTER_COLORS = [null, [40, 30, 26], [130, 98, 64], [104, 88, 64], [64, 40, 32], [34, 26, 20]];
 const TWO_PI = Math.PI * 2;
@@ -38,14 +38,8 @@ class Renderer {
   _makeStars() {
     const S = GLOBE_SIZE;
     this.stars = new Uint32Array(S * S);
-    const bg = (255 << 24) | (14 << 16) | (8 << 8) | 5; // ABGR: very dark blue
-    this.stars.fill(bg);
-    const rng = mulberry32(1234567);
-    for (let k = 0; k < 700; k++) {
-      const i = Math.floor(rng() * S * S);
-      const v = 90 + Math.floor(rng() * 165);
-      this.stars[i] = (255 << 24) | (v << 16) | (v << 8) | Math.min(255, v + 10);
-    }
+    // [UI] transparent background: the page's full-screen starfield shows behind the globe
+    this.stars.fill(0);
   }
 
   // Per-pixel lookup for the globe at the current tilt: screen pixel ->
@@ -121,6 +115,17 @@ class Renderer {
     const direct = light > 0 ? light : 0;
     const f = (0.12 + 0.88 * day * (0.5 + 0.5 * direct)) * limb;
     let r = P.R[i] * f, g = P.G[i] * f, b = P.Bc[i] * f;
+    if (this._fx) {
+      const z = (limb - 0.55) * 2.2222; // cos(angle to viewer)
+      // ocean glint: bright, tight sun reflection on water
+      if (P.biome[i] <= 2 && light > 0) {
+        const nh = (light + z) * this._hNorm;
+        if (nh > 0.975) { const q = (nh - 0.975) * 40, s = q * q * q * 0.55 * day; r += 255 * s; g += 244 * s; b += 222 * s; }
+      }
+      // atmospheric scattering on the rim, brighter on the day side
+      const rim = 1 - z, sc = rim * rim * rim * (0.18 + 0.82 * day) * 0.75, gl = this._pal.glow;
+      r += gl[0] * sc; g += gl[1] * sc; b += gl[2] * sc;
+    }
     const dm = this.damage ? this.damage[i] : 0;
     if (dm > 0) {
       const dc = DISASTER_COLORS[this.dtype[i]] || DISASTER_COLORS[1];
@@ -143,7 +148,7 @@ class Renderer {
       const c = P.city[i];
       if (c && dm < 0.5) {
         const n = (1 - day) * (1 - dm * 2) * (c / 255) * limb;
-        const cc = this.planet.palette.city;
+        const cc = this._pal.city;
         r += cc[0] * n; g += cc[1] * n; b += cc[2] * n;
       }
     }
@@ -154,7 +159,7 @@ class Renderer {
       let a = (cv - 0.56) * 3.2;
       if (a > 0) {
         if (a > 0.85) a = 0.85;
-        const cl = (0.06 + 0.94 * day) * limb, ct = this.planet.palette.cloud;
+        const cl = (0.06 + 0.94 * day) * limb, ct = this._pal.cloud;
         r = r * (1 - a) + ct[0] * cl * a; g = g * (1 - a) + ct[1] * cl * a; b = b * (1 - a) + ct[2] * cl * a;
       }
     }
@@ -164,6 +169,7 @@ class Renderer {
 
   render(view) {
     if (!this.planet.seed) return;
+    this._pal = this.planet.palette; // [perf] look the theme up once per frame, not per pixel
     if (this.mode === 'globe') this._renderGlobe(view);
     else this._renderMap(view);
     this.ctx.putImageData(this.image, 0, 0);
@@ -182,12 +188,15 @@ class Renderer {
     const gc = this.planet.palette.glow;
     for (let k = 0; k < t.gIdx.length; k++) {
       const o = t.gIdx[k], a = t.gA[k];
-      const p = buf[o];
-      const r = (p & 255) * (1 - a) + gc[0] * a, g = ((p >> 8) & 255) * (1 - a) + gc[1] * a, b = ((p >> 16) & 255) * (1 - a) + gc[2] * a;
-      buf[o] = (255 << 24) | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0);
+      buf[o] = (((a * 255) | 0) << 24) | (gc[2] << 16) | (gc[1] << 8) | gc[0]; // glow fades into the page
     }
 
     const yaw = view.yaw, sunLon = view.sunLon;
+    // [UI] sun direction in view space for the ocean glint (Blinn-Phong half vector with view = +z)
+    const l0 = sunLon - yaw, sx2 = cosDec * Math.cos(l0), sy2 = sinDec;
+    const sz = sy2 * Math.sin(this.tilt) + sx2 * Math.cos(this.tilt);
+    this._hNorm = 1 / Math.sqrt(Math.max(1e-4, 2 + 2 * sz));
+    this._fx = true;
     for (let k = 0; k < t.idx.length; k++) {
       const lon = t.lon0[k] + yaw;
       let u = lon * INV_TWO_PI + 0.5;
@@ -202,6 +211,7 @@ class Renderer {
 
   _renderMap(view) {
     const P = this.planet, buf = this.buf;
+    this._fx = false;
     const cosDec = Math.cos(view.sunDec), sinDec = Math.sin(view.sunDec);
     for (let row = 0; row < MAP_H; row++) {
       const cl = P.cosLat[row], sl = P.sinLat[row];

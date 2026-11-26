@@ -7,9 +7,10 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+<canvas id="space" aria-hidden="true"></canvas>
 <header>
   <h1>Tiny <span>Terra</span></h1>
-  <p class="tag">Grow a world from a seed. Bend its climate. Watch it turn.</p>
+  <p class="tag">Grow a world from a seed.</p>
 </header>
 
 <main>
@@ -87,10 +88,10 @@
       </div>
       <button id="pause" title="Space">⏸ Pause</button>
       <button id="mute" title="Sound on/off">🔊</button>
-      <label class="mini">Day speed <input id="daySpeed" type="range" min="0" max="100" value="30" /></label>
+      <label class="mini">Day <input id="daySpeed" type="range" min="0" max="100" value="30" /></label>
       <label class="mini">Spin <input id="spinSpeed" type="range" min="0" max="100" value="25" /></label>
       <label class="check"><input id="clouds" type="checkbox" checked /> Clouds</label>
-      <label class="check"><input id="cities" type="checkbox" checked /> City lights</label>
+      <label class="check"><input id="cities" type="checkbox" checked /> Lights</label>
     </div>
     <p class="hint">Drag to rotate · scroll to zoom · click to inspect · 🎮 game: arrows/WASD to fly, Esc to quit</p>
   </section>
@@ -130,6 +131,7 @@
 </main>
 
 <script src="js/noise.js"></script>
+<script src="js/space.js"></script>
 <script src="js/planet.js"></script>
 <script src="js/render.js"></script>
 <script src="js/sound.js"></script>

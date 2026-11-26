@@ -342,7 +342,10 @@
     try {
       const a = document.createElement('a');
       a.download = (planet.name() || 'planet').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.png';
-      a.href = canvas.toDataURL('image/png');
+      // [UI] the globe canvas is transparent now: composite it on black for the saved image
+      const out = document.createElement('canvas'); out.width = canvas.width; out.height = canvas.height;
+      const oc = out.getContext('2d'); oc.fillStyle = '#000'; oc.fillRect(0, 0, out.width, out.height); oc.drawImage(canvas, 0, 0);
+      a.href = out.toDataURL('image/png');
       Sfx.snapshot();
       document.body.appendChild(a); a.click(); a.remove();
     } catch (_) { flash('Could not save the image in this browser.'); }
