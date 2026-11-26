@@ -276,7 +276,7 @@ class Life {
       }
       ctx.globalAlpha = 1;
     }
-    if (this.decorate) this.decorate(ctx, row, col, W, H, ys[W >> 1]); // [FEATURE] war, outbreak, flood, fire, ruins…
+    if (this.decorate && this.decorate(ctx, row, col, W, H, ys[W >> 1])) return; // [FEATURE] a real photo covers the view
     // marker for the inspected point (centre)
     ctx.strokeStyle = '#ffb347'; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);

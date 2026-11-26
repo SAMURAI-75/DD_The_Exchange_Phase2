@@ -693,25 +693,35 @@
   syncDisasterUI();
 
   // ---------- sun + clock ----------
-  // [FEATURE] A proper sun: white-hot core with limb darkening, layered corona, slowly turning rays
-  // and a lens flare. Hidden when it is behind the camera; an eclipse halo when it is behind the planet.
+  // [UI] A realistic sun, as photographed from space: a white-hot disk with limb darkening and faint
+  // granulation, a soft white bloom and wide haze, and faint camera diffraction spikes.
+  let sunTex = null;
+  function makeSunTexture() {
+    const N = 128, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+    const r = N / 2, grad = g.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, '#fffef8'); grad.addColorStop(0.55, '#fff6dc'); grad.addColorStop(0.82, '#ffe3a1'); grad.addColorStop(0.95, '#ffbe62'); grad.addColorStop(1, '#ff9a3a');
+    g.fillStyle = grad; g.beginPath(); g.arc(r, r, r, 0, 6.283); g.fill();
+    g.globalCompositeOperation = 'source-atop'; const rng = mulberry32(42);
+    for (let k = 0; k < 900; k++) { const a = rng() * 6.283, d = Math.sqrt(rng()) * r; g.fillStyle = rng() < 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(200,120,40,0.07)'; g.beginPath(); g.arc(r + Math.cos(a) * d, r + Math.sin(a) * d, 1 + rng() * 2.2, 0, 6.283); g.fill(); }
+    return c;
+  }
   function paintSun(ctx, px, py, s, alpha) {
-    const t = performance.now() / 1000;
+    if (!sunTex) sunTex = makeSunTexture();
     ctx.save(); ctx.globalAlpha = alpha; ctx.globalCompositeOperation = 'lighter';
-    const halo = ctx.createRadialGradient(px, py, 0, px, py, s * 6);
-    halo.addColorStop(0, 'rgba(255,214,140,0.55)'); halo.addColorStop(0.25, 'rgba(255,170,60,0.16)'); halo.addColorStop(1, 'rgba(255,140,40,0)');
-    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(px, py, s * 6, 0, 6.283); ctx.fill();
-    ctx.translate(px, py); ctx.rotate(t * 0.05);
-    for (let k = 0; k < 12; k++) { // soft rays
-      ctx.rotate(Math.PI / 6);
-      const len = s * (3.2 + 0.8 * Math.sin(t * 0.7 + k * 1.7));
-      const g = ctx.createLinearGradient(0, 0, len, 0); g.addColorStop(0, 'rgba(255,230,170,0.22)'); g.addColorStop(1, 'rgba(255,200,120,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, -s * 0.18); ctx.lineTo(len, 0); ctx.lineTo(0, s * 0.18); ctx.fill();
+    const haze = ctx.createRadialGradient(px, py, 0, px, py, s * 10);
+    haze.addColorStop(0, 'rgba(255,244,220,0.22)'); haze.addColorStop(0.35, 'rgba(255,220,170,0.06)'); haze.addColorStop(1, 'rgba(255,200,140,0)');
+    ctx.fillStyle = haze; ctx.beginPath(); ctx.arc(px, py, s * 10, 0, 6.283); ctx.fill();
+    const bloom = ctx.createRadialGradient(px, py, s * 0.9, px, py, s * 3.4);
+    bloom.addColorStop(0, 'rgba(255,252,240,0.85)'); bloom.addColorStop(0.3, 'rgba(255,240,210,0.28)'); bloom.addColorStop(1, 'rgba(255,225,180,0)');
+    ctx.fillStyle = bloom; ctx.beginPath(); ctx.arc(px, py, s * 3.4, 0, 6.283); ctx.fill();
+    ctx.translate(px, py); ctx.rotate(Math.PI / 4); // faint diffraction spikes
+    for (let k = 0; k < 4; k++) {
+      ctx.rotate(Math.PI / 2); const L = s * 7, gl = ctx.createLinearGradient(0, 0, L, 0);
+      gl.addColorStop(0, 'rgba(255,250,235,0.35)'); gl.addColorStop(1, 'rgba(255,250,235,0)');
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.moveTo(0, -s * 0.06); ctx.lineTo(L, 0); ctx.lineTo(0, s * 0.06); ctx.fill();
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
-    const core = ctx.createRadialGradient(px - s * 0.25, py - s * 0.25, 0, px, py, s);
-    core.addColorStop(0, '#ffffff'); core.addColorStop(0.55, '#fff4cf'); core.addColorStop(0.85, '#ffd36b'); core.addColorStop(1, 'rgba(255,170,60,0.9)');
-    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(px, py, s, 0, 6.283); ctx.fill();
+    ctx.drawImage(sunTex, px - s, py - s, s * 2, s * 2);
     ctx.restore();
   }
   function drawSun(ctx) {
@@ -742,18 +752,10 @@
     // place it well clear of the globe; partly occluded when it sits behind the planet
     const dist = Math.min(R + 26 + 140 * len, W / 2 - 30);
     const px = cx + dx * dist, py = cy - dy * dist;
-    const s = 14 * (W / 800);
+    const s = 11 * (W / 800);
     const behind = sz < 0 && dist < R + s;
     sunPos = { x: px, y: py };
     paintSun(ctx, px, py, s, behind ? 0.35 : 1);
-    if (!behind) { // lens flare: faint discs along the line through the planet centre
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      [[0.55, 10, 'rgba(120,170,255,0.10)'], [1.25, 18, 'rgba(255,200,120,0.08)'], [1.7, 7, 'rgba(160,255,200,0.10)']].forEach(([k, r, c]) => {
-        const fx = px + (cx - px) * k * 2, fy = py + (cy - py) * k * 2;
-        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(fx, fy, r * (W / 800), 0, 6.283); ctx.fill();
-      });
-      ctx.restore();
-    }
   }
   function drawClock(ctx) {
     if (!planet.seed) return;
@@ -804,7 +806,7 @@
     const pills = [];
     if (r.atWar.size) pills.push(['bad', '⚔️ At war']);
     if (r.lockdown) pills.push(['bad', '🔒 Lockdown']); else if (r.masks) pills.push(['', '😷 Masks advised']);
-    if (r.water < 0.25) pills.push(['bad', '🏜️ Water shortage']);
+    if (world.inDrought(r)) pills.push(['bad', '🏜️ Drought']); else if (r.water < 0.25) pills.push(['', '🌵 Naturally arid']);
     if (r.crops < 0.3) pills.push(['bad', '🌾 Crop failure']); else if (r.crops > 0.7) pills.push(['good', '🌾 Good harvests']);
     if (r.shock > 20) pills.push(['bad', '🕯️ Mourning']);
     card.innerHTML = `
@@ -819,7 +821,9 @@
       ${enemies ? `<div class="rc-row"><span>At war with</span><b>${enemies}</b></div>` : ''}
       ${op && op.hostile ? `<div class="rc-row"><span>Public opinion is most hostile to</span><b>${op.hostile.flag} ${esc(op.hostile.name)} (${op.hostileV.toFixed(0)})</b></div>` : ''}
       ${op && op.friend ? `<div class="rc-row"><span>…and warmest toward</span><b>${op.friend.flag} ${esc(op.friend.name)} (+${op.friendV.toFixed(0)})</b></div>` : ''}
-      ${world.plague && (r.infected > 0.5 || r.recovered > 0) ? `<div class="rc-row"><span>${esc(world.plague.name)}</span><b>${fmtPop(r.infected)} sick · ${fmtPop(r.plagueDead)} dead</b></div>` : ''}
+      ${world.plague && r.cases > 0 ? `<div class="rc-row"><span>🦠 ${esc(world.plague.name)}: total cases so far</span><b>${fmtPop(r.cases)}</b></div>
+        <div class="rc-row"><span>Sick right now · deaths</span><b>${fmtPop(r.infected)} · ${fmtPop(r.plagueDead)}</b></div>
+        <div class="rc-row"><span>First case</span><b>year ${Math.floor(r.firstCase)}${world.spreads.find((x) => x.b === r.id && x.route !== 'origin') ? ' via ' + (world.spreads.find((x) => x.b === r.id).route === 'air' ? '✈️ air travel from ' : '🚶 the border with ') + esc(world.regions[world.spreads.find((x) => x.b === r.id).a].name) : ' (outbreak started here)'}</b></div>` : ''}
       ${r.cities.length ? `<div class="rc-row"><span>Cities</span><b>${r.cities.slice(0, 6).map((c) => esc(c.name)).join(', ')}</b></div>` : ''}
       <div class="tagrow">${pills.map(([k, t]) => `<span class="tag-pill ${k}">${t}</span>`).join('')}</div>
       ${stanceHTML(r)}`;
@@ -904,7 +908,9 @@
     const p = world.plague, out = $('plagueStatus');
     if (!p) { out.textContent = ''; return; }
     const sick = world.regions.reduce((s, r) => s + r.infected, 0), hit = world.regions.filter((r) => r.infected > 0.5 || r.recovered > 0).length;
-    out.textContent = `${p.kind} “${p.name}”: ${fmtPop(sick)} sick now · ${fmtPop(p.totalDead)} dead · ${hit} nations reached · vaccine ${p.vaccine.toFixed(0)}%`;
+    const top = world.regions.filter((r) => r.cases > 0).sort((a, b) => b.cases - a.cases).slice(0, 5);
+    out.innerHTML = `<b>${esc(p.kind)} “${esc(p.name)}”</b>: ${fmtPop(world.regions.reduce((s, r) => s + (r.cases || 0), 0))} cases so far · ${fmtPop(sick)} sick now · ${fmtPop(p.totalDead)} dead · ${hit} nations · vaccine ${p.vaccine.toFixed(0)}%` +
+      (top.length ? `<div class="toplist">${top.map((r) => `<span>${r.flag} ${esc(r.name)} <b>${fmtPop(r.cases)}</b></span>`).join('')}</div>` : '');
   }
 
   for (const b of $('dooms').children) b.addEventListener('click', () => {
@@ -942,6 +948,14 @@
     setView('globe');
     view.yaw = lon * Math.PI / 180; renderer.setTilt(lat * Math.PI / 180);
     const hit = { row: Math.max(0, Math.min(MAP_H - 1, Math.floor((0.5 - lat / 180) * MAP_H))), col: Math.max(0, Math.min(MAP_W - 1, Math.floor((lon / 360 + 0.5) * MAP_W))) };
+    if (found.c && planet.elev[hit.row * MAP_W + hit.col] < planet.seaLevel) { // [FIX] coastal cities: snap to the nearest land pixel
+      let best = null;
+      for (let d = 1; d <= 4 && !best; d++) for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) {
+        const rr = hit.row + dy, cc = (hit.col + dx + MAP_W) % MAP_W; if (rr < 0 || rr >= MAP_H) continue;
+        if (!best && planet.elev[rr * MAP_W + cc] >= planet.seaLevel) best = { row: rr, col: cc };
+      }
+      if (best) { hit.row = best.row; hit.col = best.col; }
+    }
     state.inspected = hit; renderer.marker = hit; world.sel = found.r.id; world.highlightCity = found.c ? found.c.name : null;
     msg.textContent = found.c ? `${found.c.name}, ${found.r.name}` : found.r.name;
     Sfx.inspect(); refreshInspect(); renderRegionCard();

@@ -5,7 +5,8 @@
 
 // [FEATURE] real photos for events (Wikimedia Commons, freely licensed; see README credits)
 const SCENE_PHOTOS = {};
-for (const k of ['drought', 'quake', 'war', 'flood', 'fire', 'volcano', 'impact', 'plague', 'lava']) {
+for (const k of ['drought', 'quake', 'war', 'flood', 'fire', 'volcano', 'impact', 'plague', 'lava',
+  'b_desert', 'b_forest', 'b_rainforest', 'b_grass', 'b_savanna', 'b_tundra', 'b_snow', 'b_mountain', 'b_beach', 'b_ocean', 'b_seaice']) {
   const im = new Image(); im.src = 'assets/scenes/' + k + '.jpg'; SCENE_PHOTOS[k] = im;
 }
 function drawPhoto(ctx, im, W, H) { // "cover" fit, slightly darkened at the bottom for the caption
@@ -46,7 +47,7 @@ class World {
 
   reset() {
     this.year = 0; this.warming = 0; this.drying = 0; this.wildlife = 100; this.speciesLost = 0;
-    this.wars = []; this.plague = null; this.doom = null; this.doomAmt = 0; this.vanished = false;
+    this.wars = []; this.plague = null; this.spreads = []; this.doom = null; this.doomAmt = 0; this.vanished = false;
     this.front.fill(0); this.foot.fill(0); this.events = [];
   }
 
@@ -154,6 +155,7 @@ class World {
       if (initPop) {
         if (a.w > 0) { r.lon = a.lon / a.w; r.lat = a.lat / a.w; }
         r.pop = r.pop0 = r.real ? r.realPop : Math.round(a.cap);
+        r.water0 = r.water; // normal water level for this country (deserts are dry, not in drought)
         r.economy = r.econ0; r.approval = 50 + (r.econ0 - 50) * 0.3;
         r.happiness = 55 + r.crops * 20 + (r.econ0 - 50) * 0.2;
       }
@@ -179,11 +181,13 @@ class World {
     if (this.doom) return { emoji: '☄️', text: 'Apocalyptic' };
     if (T > 32) return { emoji: '🥵', text: `Heatwave · ${T.toFixed(0)} °C` };
     if (T < -8) return { emoji: '❄️', text: `Freezing · ${T.toFixed(0)} °C` };
-    if (r.water < 0.22) return { emoji: '🏜️', text: `Drought · ${T.toFixed(0)} °C` };
+    if (this.inDrought(r)) return { emoji: '🏜️', text: `Drought · ${T.toFixed(0)} °C` };
+    if (r.water < 0.22) return { emoji: '🌵', text: `Arid · ${T.toFixed(0)} °C` };
     if (r.avgM > 0.62) return { emoji: '🌧️', text: `Rainy · ${T.toFixed(0)} °C` };
     if (r.avgM > 0.45) return { emoji: '⛅', text: `Mild, some clouds · ${T.toFixed(0)} °C` };
     return { emoji: '☀️', text: `Sunny · ${T.toFixed(0)} °C` };
   }
+  inDrought(r) { return r.water < 0.25 && r.water < (r.water0 == null ? r.water : r.water0) - 0.06; } // [FIX] drier than normal
   economyLabel(r) {
     const e = r.economy, d = e - r.econ0;
     const trend = d < -12 ? 'in recession' : d < -4 ? 'slowing' : d > 3 ? 'growing' : 'stable';
@@ -292,8 +296,9 @@ class World {
     const r = this.regionAt(row, col);
     if (r < 0 || this.doom) return false;
     this.plague = Object.assign({ name: 'Unknown', kind: 'Virus', r0: 3, lethality: 0.02, incubation: 5, air: true, land: true, water: false, cureDifficulty: 5, vaccine: 0, origin: r, since: this.year, totalDead: 0 }, cfg);
-    this.regions.forEach((q) => { q.infected = 0; q.recovered = 0; q.vaccinated = 0; q.masks = false; q.lockdown = false; });
-    this.regions[r].infected = 25;
+    this.regions.forEach((q) => { q.infected = 0; q.recovered = 0; q.vaccinated = 0; q.masks = false; q.lockdown = false; q.cases = 0; q.firstCase = null; });
+    this.regions[r].infected = 25; this.regions[r].cases = 25; this.regions[r].firstCase = this.year;
+    this.spreads = [{ a: r, b: r, route: 'origin', t: 0, year: this.year }];
     this.events.push({ t: 0, type: 'plague', r });
     return true;
   }
@@ -335,6 +340,7 @@ class World {
   update(dt, years) {
     if (!this.ready) return;
     for (const e of this.events) e.t += dt;
+    if (this.spreads) for (const s of this.spreads) s.t += dt;
     this.events = this.events.filter((e) => e.t < 4);
     this._updateDoom(dt);
     if (years > 0 && !this.vanished && !(this.doom && this.doom.applied) && this.worldPop > 1) this._simulate(years); // [FIX] time stops when no one is left
@@ -397,6 +403,7 @@ class World {
         const care = 1.35 - (r.economy / 100) * 0.7;
         const deaths = Math.min(r.pop, rec * pl.lethality * care);
         r.infected = Math.max(0, r.infected + newInf - rec);
+        r.cases = (r.cases || 0) + newInf; // [FEATURE] cumulative cases so far
         r.recovered += rec - deaths; r.pop -= deaths; r.dead += deaths; r.plagueDead += deaths; pl.totalDead += deaths;
         const frac = r.infected / N;
         if (!r.masks && frac > 0.0005) r.masks = true;
@@ -406,10 +413,13 @@ class World {
         if (frac > 0.0002) {
           for (let b = 0; b < this.regions.length; b++) {
             if (b === k || this.regions[b].pop < 1 || this.regions[b].infected > 0.5 || this.regions[b].recovered > 0) continue;
-            let p = 0;
-            if (pl.land && this.adj[k][b] > 0) p += frac * 40 * days * (r.lockdown ? 0.3 : 1);
-            if (pl.air) p += frac * 6 * days * (this.regions[b].cities.length ? 1 : 0.2) * (r.lockdown ? 0.15 : 1);
-            if (Math.random() < p) this.regions[b].infected = 10;
+            let pLand = 0, pAir = 0;
+            if (pl.land && this.adj[k][b] > 0) pLand = frac * 40 * days * (r.lockdown ? 0.3 : 1);
+            if (pl.air) pAir = frac * 6 * days * (this.regions[b].cities.length ? 1 : 0.2) * (r.lockdown ? 0.15 : 1);
+            if (Math.random() < pLand + pAir) {
+              const B = this.regions[b]; B.infected = 10; B.cases = (B.cases || 0) + 10; B.firstCase = this.year;
+              this.spreads.push({ a: k, b, route: Math.random() * (pLand + pAir) < pLand ? 'land' : 'air', t: 0, year: this.year }); // [FEATURE] remember the route
+            }
           }
         }
       }
@@ -503,6 +513,7 @@ class World {
       ctx.font = '18px system-ui, "Apple Color Emoji", sans-serif';
       for (const w of this.wars) for (const k of [w.a, w.b]) { const r = this.regions[k], p = ll(r.lon, r.lat); if (p) ctx.fillText('⚔️', p.x, p.y + Math.sin(t * 4 + k) * 2); }
       if (this.plague) for (const r of this.regions) if (r.pop > 0 && r.infected / r.pop > 0.0005) { const p = ll(r.lon, r.lat); if (p) ctx.fillText('🦠', p.x + 14, p.y - 6); }
+      if (this.plague && this.spreads.length) this._drawSpread(ctx, renderer);
     }
     ctx.restore();
     this._drawDoom(ctx, renderer, sunPos);
@@ -540,6 +551,36 @@ class World {
       const p = this._proj(renderer, r.lon, r.lat); if (!p || p.z < 0.35) continue;
       ctx.globalAlpha = r.id === this.sel ? 1 : 0.55 * p.z;
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillText(r.name, p.x + 0.8, p.y + 0.8); ctx.fillStyle = '#fff'; ctx.fillText(r.name, p.x, p.y);
+    }
+    ctx.restore();
+  }
+
+  // [FEATURE] where the disease is travelling: an arc from the country it came from to the one it reached.
+  // New routes animate (a ✈️ flies along air routes, red dashes march along land routes) then stay as faint lines.
+  _drawSpread(ctx, renderer) {
+    const t = performance.now() / 1000;
+    ctx.save(); ctx.lineCap = 'round';
+    const recent = this.spreads.filter((s) => s.route === 'origin' || s.t < 14).slice(-30); // [UI] keep the globe readable
+    for (const s of recent) {
+      if (s.route === 'origin') { const o = this.regions[s.a], p = this._proj(renderer, o.lon, o.lat); if (p) { const pulse = (t % 1.6) / 1.6; ctx.strokeStyle = `rgba(255,69,58,${1 - pulse})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 6 + pulse * 22, 0, 6.283); ctx.stroke(); } continue; }
+      const A = this.regions[s.a], Bq = this.regions[s.b];
+      const pts = []; // sample the great circle between the two countries, lifted into an arc
+      for (let k = 0; k <= 24; k++) {
+        const f = k / 24, lon = A.lon + (((Bq.lon - A.lon + 540) % 360) - 180) * f, lat = A.lat + (Bq.lat - A.lat) * f;
+        const p = this._proj(renderer, lon, lat); if (!p) { pts.push(null); continue; }
+        const lift = Math.sin(f * Math.PI) * (s.route === 'air' ? 22 : 6) * (renderer.mode === 'map' ? 0.6 : 1);
+        pts.push({ x: p.x, y: p.y - lift });
+      }
+      const fresh = Math.max(0, 1 - s.t / 6);
+      const fade = Math.min(1, (14 - s.t) / 8); ctx.strokeStyle = `rgba(255,69,58,${(0.12 + 0.68 * fresh) * fade})`; ctx.lineWidth = 1 + 1.5 * fresh;
+      ctx.setLineDash(s.route === 'land' ? [4, 4] : []); ctx.lineDashOffset = -t * 20;
+      ctx.beginPath(); let started = false;
+      for (const p of pts) { if (!p) { started = false; continue; } if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y); }
+      ctx.stroke(); ctx.setLineDash([]);
+      if (fresh > 0) { // the traveller
+        const idx = Math.min(24, Math.floor(((s.t * 0.5) % 1) * 25)), p = pts[idx];
+        if (p) { ctx.font = s.route === 'air' ? '14px system-ui, "Apple Color Emoji"' : '12px system-ui, "Apple Color Emoji"'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = fresh; ctx.fillText(s.route === 'air' ? '✈️' : '🦠', p.x, p.y); ctx.globalAlpha = 1; }
+      }
     }
     ctx.restore();
   }
@@ -626,15 +667,30 @@ class World {
     else if (this.front[i] > 0.05 || (r && r.atWar.size && land0)) { photo = 'war'; label = '⚔️ War zone' + (r ? ' · ' + r.name : ''); }
     else if (r && this.plague && r.pop > 0 && r.infected / r.pop > 0.0002 && land0) { photo = 'plague'; label = `🦠 ${this.plague.name} outbreak`; }
     else if (dm0 > 0.1) { photo = { 1: 'impact', 2: 'quake', 3: 'flood', 4: 'volcano', 5: 'fire' }[dt0] || 'impact'; label = { 1: '☄️ Impact crater', 2: '🫨 Earthquake damage', 3: '🌊 Flooded', 4: '🌋 Eruption', 5: '🔥 Wildfire' }[dt0] || '☄️ Impact'; }
-    else if (r && land0 && r.water < 0.22) { photo = 'drought'; label = '🏜️ Drought'; }
+    else if (r && land0 && this.inDrought(r)) { photo = 'drought'; label = '🏜️ Drought'; }
+    if (!photo && !(this.doom && this.doomAmt > 0.3)) { // [UI] no event here: a real photo of the landscape itself
+      const b = P.biome[i];
+      const BIO = { 0: ['b_ocean', '🌊 Deep ocean'], 1: ['b_ocean', '🌊 Ocean'], 2: ['b_ocean', '🌊 Shallow sea'], 3: ['b_seaice', '🧊 Sea ice'], 4: ['b_beach', '🏖️ Beach'], 5: ['b_desert', '🏜️ Desert'], 6: ['b_grass', '🌾 Grassland'], 7: ['b_forest', '🌳 Forest'], 8: ['b_rainforest', '🌴 Rainforest'], 9: ['b_tundra', '🪨 Tundra'], 10: ['b_snow', '❄️ Snow & ice'], 11: ['b_mountain', '🏔️ Mountains'], 12: ['b_savanna', '🦒 Savanna'] };
+      const e = BIO[b] || ['b_grass', ''];
+      // [FIX] no landmark photos for generic cities: show the local landscape, named after the nearest city
+      const lat0 = P.latRad[row] * 57.29578, lon0 = ((col + 0.5) / MAP_W - 0.5) * 360;
+      let near = null, best = 2.2;
+      if (r) for (const c of r.cities) { const d = Math.hypot(((c.lon - lon0 + 540) % 360) - 180, c.lat - lat0); if (d < best) { best = d; near = c; } }
+      photo = e[0]; label = e[1] + (near ? ' · near ' + near.name : '') + (r && land0 ? ', ' + r.name : '');
+    }
     const im = photo && SCENE_PHOTOS[photo];
     if (im && im.complete && im.naturalWidth) {
       drawPhoto(ctx, im, W, H);
+      // day / night: darken and cool the photo on the night side, warm it at dusk
+      const light = this.life.sunlight(row, col), day = Math.max(0, Math.min(1, (light + 0.1) / 0.3));
+      if (day < 1) { ctx.fillStyle = `rgba(6,10,30,${(1 - day) * 0.72})`; ctx.fillRect(0, 0, W, H); }
+      if (day > 0 && day < 0.7) { ctx.fillStyle = `rgba(255,120,40,${0.18 * (1 - Math.abs(day - 0.35) / 0.35)})`; ctx.fillRect(0, 0, W, H); }
+      if (day < 0.3) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; for (let k = 0; k < 24; k++) ctx.fillRect((k * 97) % W, (k * 53) % (H * 0.4), 1.5, 1.5); }
       ctx.save(); ctx.font = `600 ${Math.round(H / 11)}px -apple-system, system-ui, sans-serif`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
       const w = ctx.measureText(label).width + 20, hh = Math.round(H / 7);
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(10, 10, w, hh, hh / 2) : ctx.rect(10, 10, w, hh); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.fillText(label, 20, 10 + hh / 2); ctx.restore();
-      return;
+      return true; // the photo covers the whole view
     }
     const em = (s, x, y, size = 16) => { ctx.font = `${size}px system-ui, "Apple Color Emoji", sans-serif`; ctx.fillText(s, x, y); };
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

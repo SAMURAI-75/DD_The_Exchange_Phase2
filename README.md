@@ -118,7 +118,8 @@ js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 - **🧪 Pandemic lab:** design a pathogen (type, R₀, lethality, cure difficulty, air/land/water spread), release it anywhere and watch it spread while countries respond with masks, lockdowns and vaccines.
 - **⏩ Time & human impact:** fast-forward to watch population-driven warming, drying, deforestation, extinctions and lost wildlife.
 - **☄️ End of the world:** meteor storm, planet collision, the sun going supernova, or a black hole.
-- **Close-ups:** clicking a spot shows a real photo of what is happening there (war, outbreak, flood, wildfire, eruption, earthquake, impact crater, drought, molten planet), otherwise a smoothed landscape view.
+- **Close-ups:** clicking a spot always shows a real photo: of what is happening there (war, outbreak, flood, wildfire, eruption, earthquake, impact crater, drought, molten planet) or of the landscape itself (desert, forest, rainforest, grassland, savanna, tundra, ice, mountains, beach, ocean, sea ice), darkened at night and named after the nearest city.
+- **Pandemic tracking:** animated routes show where the disease travels (✈️ by air, dashes over land borders), and every country card shows its total cases so far and where its first case came from; a top-5 list shows the hardest-hit countries.
 - **♻️ The Great Reset** puts everything (sliders, switches, wars, plagues, disasters, time) back to normal; a splash screen plays on every load.
 - Candy and Alien themes removed.
 
@@ -137,3 +138,14 @@ All of it is bundled in `js/earth-data.js` and `js/earth-tex.js`, so the project
 - `assets/scenes/impact.jpg`: "Meteor Crater - Arizona.jpg" by National Map Seamless Server, Public domain (https://commons.wikimedia.org/wiki/File:Meteor_Crater_-_Arizona.jpg)
 - `assets/scenes/plague.jpg`: "Pandemic masks NYC.jpg" by Shanluan, CC BY-SA 4.0 (https://commons.wikimedia.org/wiki/File:Pandemic_masks_NYC.jpg)
 - `assets/scenes/lava.jpg`: "Pāhoehoe Lava flow.JPG" by Brocken Inaglory, CC BY-SA 3.0 (https://commons.wikimedia.org/wiki/File:P%C4%81hoehoe_Lava_flow.JPG)
+- `assets/scenes/b_desert.jpg`: "The massive sand dunes of Rub Al Khali.jpg" by Srk60, CC BY-SA 4.0 (https://commons.wikimedia.org/wiki/File:The_massive_sand_dunes_of_Rub_Al_Khali.jpg)
+- `assets/scenes/b_rainforest.jpg`: "Amazon rainforest treetops in Tena, Ecuador.jpg" by Jay, CC BY 2.0 (https://commons.wikimedia.org/wiki/File:Amazon_rainforest_treetops_in_Tena,_Ecuador.jpg)
+- `assets/scenes/b_grass.jpg`: "Prairie landscape - geograph.org.uk - 3759074.jpg" by N Chadwick, CC BY-SA 2.0 (https://commons.wikimedia.org/wiki/File:Prairie_landscape_-_geograph.org.uk_-_3759074.jpg)
+- `assets/scenes/b_savanna.jpg`: "Zebras grazing among acacia trees, Serengeti National Park.jpg" by Agness Abubakar Saidi, CC0 (https://commons.wikimedia.org/wiki/File:Zebras_grazing_among_acacia_trees,_Serengeti_National_Park.jpg)
+- `assets/scenes/b_tundra.jpg`: "Mountain and tundra landscape in Ivvavik National Park, YT.jpg" by Daniel Case, CC BY-SA 3.0 (https://commons.wikimedia.org/wiki/File:Mountain_and_tundra_landscape_in_Ivvavik_National_Park,_YT.jpg)
+- `assets/scenes/b_snow.jpg`: "A view of Antarctica’s ice sheet and mountains.jpeg" by NASA/Christy Hansen, Public domain (https://commons.wikimedia.org/wiki/File:A_view_of_Antarctica%E2%80%99s_ice_sheet_and_mountains.jpeg)
+- `assets/scenes/b_mountain.jpg`: "Himalayas, Ama Dablam, Nepal.jpg" by Vyacheslav Argenberg, CC BY 4.0 (https://commons.wikimedia.org/wiki/File:Himalayas,_Ama_Dablam,_Nepal.jpg)
+- `assets/scenes/b_beach.jpg`: "Havelock Island, Mangrove tree on the beach, Andaman Islands.jpg" by Vyacheslav Argenberg, CC BY 4.0 (https://commons.wikimedia.org/wiki/File:Havelock_Island,_Mangrove_tree_on_the_beach,_Andaman_Islands.jpg)
+- `assets/scenes/b_ocean.jpg`: "Ocean waves and foam seascape -- 29 of 33.jpg" by Maritess Sulcer, CC0 (https://commons.wikimedia.org/wiki/File:Ocean_waves_and_foam_seascape_--_29_of_33.jpg)
+- `assets/scenes/b_seaice.jpg`: "North Pole, Arctic Ocean, sea ice 02.jpg" by Matti&amp;Keti, CC BY-SA 4.0 (https://commons.wikimedia.org/wiki/File:North_Pole,_Arctic_Ocean,_sea_ice_02.jpg)
+- `assets/scenes/b_forest.jpg`: "Autumnal deciduous forest - Laubwand im Herbst.jpg" by Norbert Nagel, Mörfelden-Walldorf, Germany, CC BY-SA 3.0 (https://commons.wikimedia.org/wiki/File:Autumnal_deciduous_forest_-_Laubwand_im_Herbst.jpg)

@@ -169,12 +169,19 @@ class Planet {
             sr += T.day[k * 4]; sg += T.day[k * 4 + 1]; sb += T.day[k * 4 + 2]; sn += T.night[k];
           }
           this.texR[i] = sr / 9; this.texG[i] = sg / 9; this.texB[i] = sb / 9; this.nightL[i] = sn / 9 / 255;
+          if (!land) { const lum = (sr + sg + sb) / 27; this.elev[i] = e = 0.47 - 0.42 * clamp(1 - (lum - 12) / 70, 0, 1) + detail * 0.01; } // darker blue = deeper
+          if (!this.gulf) this.gulf = new Float32Array(MAP_W * MAP_H);
+          this.gulf[i] = lon > -12 && lon < 45 && lat > 42 && lat < 72 ? 6 * Math.min(1, (45 - lon) / 30) * Math.min(1, (72 - lat) / 12, (lat - 42) / 6) : 0;
         }
         this.elev[i] = e;
         if (e < min) min = e;
         if (e > max) max = e;
 
         this.moist[i] = fbm(nMoist, px * 1.7 + o[6], py * 1.7 + o[7], pz * 1.7 + o[8], 4, 0.5) * 0.5 + 0.5;
+        if (this.isEarth && this.texLand[i]) { const R = this.texR[i], G = this.texG[i], Bl = this.texB[i], sr = R * 9, sg = G * 9, sb = Bl * 9; // [FIX] real moisture from the imagery instead of random noise
+            const sum = R + G + Bl + 1, green = G / sum, warm = (R - Bl) / 255;
+            this.moist[i] = clamp(0.2 + (green - 0.33) * 6 - Math.max(0, warm - 0.15) * 0.9 - Math.max(0, (R + G + Bl) / 765 - 0.45) * 0.8, 0.02, 0.95);
+          }
         this.cloud[i] = fbm(nCloud, px * 2.6 + o[9], py * 5.2 + o[0], pz * 2.6 + o[1], 5, 0.55) * 0.5 + 0.5;
         this.cityNoise[i] = nCity(px * 16 + o[2], py * 16 + o[3], pz * 16 + o[4]) * 0.5 + 0.5;
       }
@@ -234,17 +241,22 @@ class Planet {
     const h = land ? (e - sea) / Math.max(1e-6, 1 - sea) : (sea - e) / Math.max(1e-6, sea);
     const lat = this.latRad[row];
     const latDeg = Math.abs(lat) * 57.29578;
-    let T = (this.isEarth ? 31 - 48 * Math.pow(Math.abs(this.sinLat[row]), 2.2) : 33 - 50 * Math.pow(Math.abs(this.sinLat[row]), 1.6)) + c.temp; // Earth: closer to real zonal means
+    let T = (this.isEarth ? 30 - 44 * Math.pow(Math.abs(this.sinLat[row]), 2.6) + (this.gulf ? this.gulf[i] : 0) : 33 - 50 * Math.pow(Math.abs(this.sinLat[row]), 1.6)) + c.temp; // Earth: close to real zonal means (+ Gulf Stream)
     if (land) T -= h * 42;           // lapse rate: mountains are colder
     else T = T * 0.92 + 1;           // oceans are slightly moderated
     // Subtropical dry belt (~25°) like Earth's Hadley cells; extreme heat dries land out.
-    let m = this.moist[i] + c.moisture - 0.26 * Math.exp(-(((latDeg - 25) / 9) ** 2));
+    let m = this.moist[i] + c.moisture - (this.isEarth ? 0 : 0.26 * Math.exp(-(((latDeg - 25) / 9) ** 2))); // Earth's dry belt is already in the imagery
     if (T > 28) m -= (T - 28) * 0.012;
     if (land && h < 0.06) m += 0.06; // coasts are wetter
     m = clamp(m, 0, 1);
     // Reused object: avoids ~300k allocations per classify pass.
     const out = this._sampleOut || (this._sampleOut = {});
     out.land = land; out.h = h; out.T = T; out.m = m; out.e = e;
+    if (this.isEarth && land && h < 0.012) { // coastal = a sea pixel within 2 cells
+      const x = i % MAP_W; let coast = false;
+      for (let d = -2; d <= 2 && !coast; d++) { const xx = (x + d + MAP_W) % MAP_W; for (let dr = -2; dr <= 2; dr++) { const rr = row + dr; if (rr >= 0 && rr < MAP_H && this.elev[rr * MAP_W + xx] < sea) { coast = true; break; } } }
+      out.coast = coast;
+    } else out.coast = false;
     return out;
   }
 
@@ -257,7 +269,7 @@ class Planet {
     }
     if (s.T < -4) return B.SNOW;
     if (s.h > 0.42) return s.T < 4 ? B.SNOW : B.ROCK;
-    if (s.h < 0.012 && s.T > 2 && s.m < 0.8) return B.BEACH;
+    if (s.h < 0.012 && s.T > 2 && s.m < 0.8 && (!this.isEarth || s.coast)) return B.BEACH; // [FIX] Earth: only real coastline
     if (s.T < 3) return B.TUNDRA;
     if (s.m < 0.28) return s.T > 10 ? B.DESERT : B.TUNDRA;
     if (s.m < 0.42) return s.T > 21 ? B.SAVANNA : B.GRASS;
