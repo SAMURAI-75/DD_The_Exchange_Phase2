@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tiny Terra — Planet Generator</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>Tiny <span>Terra</span></h1>
+  <p class="tag">Grow a world from a seed. Bend its climate. Watch it turn.</p>
+</header>
+
+<main>
+  <!-- LEFT: world controls -->
+  <aside class="panel">
+    <h2>Seed</h2>
+    <form id="seedForm" class="seed-row" autocomplete="off">
+      <input id="seed" type="text" maxlength="40" placeholder="any text or number" aria-label="Planet seed" />
+      <button type="submit" title="Generate (Enter)">Go</button>
+      <button type="button" id="randomSeed" title="Random seed (R)">🎲</button>
+    </form>
+    <p id="seedError" class="error" role="alert" hidden></p>
+
+    <h2>Climate</h2>
+    <label class="slider">
+      <span>Ocean coverage <output id="oceanOut"></output></span>
+      <input id="ocean" type="range" min="5" max="95" step="1" value="60" />
+    </label>
+    <label class="slider">
+      <span>Temperature <output id="tempOut"></output></span>
+      <input id="temp" type="range" min="-30" max="30" step="1" value="0" />
+    </label>
+    <label class="slider">
+      <span>Moisture <output id="moistOut"></output></span>
+      <input id="moisture" type="range" min="-50" max="50" step="1" value="0" />
+    </label>
+    <label class="slider">
+      <span>Terrain roughness <output id="roughOut"></output></span>
+      <input id="rough" type="range" min="0" max="100" step="1" value="50" />
+    </label>
+    <label class="check"><input id="melt" type="checkbox" checked /> Melting ice raises sea level</label>
+    <button id="timelapse" class="wide">🌡️ Play warming time-lapse</button>
+
+    <h2>Presets</h2>
+    <div class="grid2" id="presets"></div>
+  </aside>
+
+  <!-- CENTER: the planet -->
+  <section class="stage">
+    <div class="stage-top">
+      <div class="title-block">
+        <div id="planetName" class="planet-name">—</div>
+        <div id="planetClass" class="planet-class"></div>
+      </div>
+      <div class="seg" role="tablist" aria-label="View">
+        <button id="viewGlobe" class="on" role="tab" aria-selected="true">🌍 Globe</button>
+        <button id="viewMap" role="tab" aria-selected="false">🗺️ Map</button>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="planet" aria-label="Planet view. Drag to rotate, click to inspect."></canvas>
+      <div id="busy" class="busy" hidden>Generating…</div>
+    </div>
+    <div class="playbar">
+      <button id="pause" title="Space">⏸ Pause</button>
+      <label class="mini">Day speed <input id="daySpeed" type="range" min="0" max="100" value="30" /></label>
+      <label class="mini">Spin <input id="spinSpeed" type="range" min="0" max="100" value="25" /></label>
+      <label class="check"><input id="clouds" type="checkbox" checked /> Clouds</label>
+      <label class="check"><input id="cities" type="checkbox" checked /> City lights</label>
+    </div>
+    <p class="hint">Drag the globe to rotate · click anywhere to inspect a location</p>
+  </section>
+
+  <!-- RIGHT: info -->
+  <aside class="panel">
+    <h2>Location</h2>
+    <div id="inspect" class="inspect muted">Click the planet to inspect a spot.</div>
+
+    <h2>Planet census</h2>
+    <div id="stats" class="stats"></div>
+
+    <h2>Share</h2>
+    <div class="grid2">
+      <button id="copyLink">🔗 Copy link</button>
+      <button id="snapshot">📸 Save PNG</button>
+    </div>
+    <form id="loadForm" class="seed-row" autocomplete="off">
+      <input id="loadCode" type="text" placeholder="paste a planet link" aria-label="Planet link" />
+      <button type="submit">Load</button>
+    </form>
+    <p id="shareMsg" class="msg" role="status"></p>
+  </aside>
+</main>
+
+<script src="js/noise.js"></script>
+<script src="js/planet.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
