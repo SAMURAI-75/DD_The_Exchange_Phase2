@@ -110,7 +110,7 @@ js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 
 ## Phase 2 additions (team Ding Ding)
 
-- **18 bugs fixed** (see `Phase2_Bug_Report.docx`), including a share link that crashed the whole app.
+- **18 bugs fixed** (bug report on the original version with screenshots: `Phase2_Report/Phase2_Bug_Report_Original.docx`; fixes and re-tests: `Phase2_Report/Phase2_Fixes_and_Retests.docx`), including a share link that crashed the whole app.
 - **New look:** Apple-style frosted-glass panels floating over a full-screen starfield; sharper globe with ocean glint and atmosphere; a real sun (corona, rays, lens flare, eclipse halo).
 - **🌍 Real Earth:** one click loads Earth with hand-drawn coastlines, 56 countries (borders, flags, governments) and 90 real cities with lights. Search any country or city (e.g. *Bangalore*): the globe flies there and a card shows weather, population, how people feel, public approval, economy, crops, fresh water, wars and public opinion of other nations.
 - **Nations everywhere:** generated planets get their own named nations.
