@@ -118,10 +118,22 @@ js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 - **🧪 Pandemic lab:** design a pathogen (type, R₀, lethality, cure difficulty, air/land/water spread), release it anywhere and watch it spread while countries respond with masks, lockdowns and vaccines.
 - **⏩ Time & human impact:** fast-forward to watch population-driven warming, drying, deforestation, extinctions and lost wildlife.
 - **☄️ End of the world:** meteor storm, planet collision, the sun going supernova, or a black hole.
-- **Close-ups:** the landscape view shows what is happening at a spot: war zones, outbreaks, floods, fires, ruins, drought, doom.
+- **Close-ups:** clicking a spot shows a real photo of what is happening there (war, outbreak, flood, wildfire, eruption, earthquake, impact crater, drought, molten planet), otherwise a smoothed landscape view.
+- **♻️ The Great Reset** puts everything (sliders, switches, wars, plagues, disasters, time) back to normal; a splash screen plays on every load.
 - Candy and Alien themes removed.
 
 ### Data credits
 - Satellite imagery: NASA Earth Observatory, Blue Marble and Black Marble (public domain), via the three-globe example images.
 - Country borders, populations, income groups: Natural Earth 1:110m Admin 0 (public domain).
 All of it is bundled in `js/earth-data.js` and `js/earth-tex.js`, so the project still runs offline with no server.
+
+### Close-up photos (Wikimedia Commons)
+- `assets/scenes/drought.jpg`: "California Drought Dry Lakebed 2009.jpg" by National Oceanic and Atmospheric Administration, Public domain (https://commons.wikimedia.org/wiki/File:California_Drought_Dry_Lakebed_2009.jpg)
+- `assets/scenes/quake.jpg`: "2023 Turkey Earthquake Damage 4.jpg" by VOA, Public domain (https://commons.wikimedia.org/wiki/File:2023_Turkey_Earthquake_Damage_4.jpg)
+- `assets/scenes/war.jpg`: "Destroyed buildings in Mekelle, Tigray (2022).jpg" by Mulugeta Atsbeha, Public domain (https://commons.wikimedia.org/wiki/File:Destroyed_buildings_in_Mekelle,_Tigray_(2022).jpg)
+- `assets/scenes/flood.jpg`: "Flood water in Cumberland Street - geograph.org.uk - 8195991.jpg" by DS Pugh, CC BY-SA 2.0 (https://commons.wikimedia.org/wiki/File:Flood_water_in_Cumberland_Street_-_geograph.org.uk_-_8195991.jpg)
+- `assets/scenes/fire.jpg`: "Lick Fire on the Umatilla National Forest burning at night.jpg" by U.S. Forest Service- Pacific Northwest Region, Public domain (https://commons.wikimedia.org/wiki/File:Lick_Fire_on_the_Umatilla_National_Forest_burning_at_night.jpg)
+- `assets/scenes/volcano.jpg`: "Fimmvorduhals second fissure 2010 04 02.JPG" by Boaworm, CC BY 3.0 (https://commons.wikimedia.org/wiki/File:Fimmvorduhals_second_fissure_2010_04_02.JPG)
+- `assets/scenes/impact.jpg`: "Meteor Crater - Arizona.jpg" by National Map Seamless Server, Public domain (https://commons.wikimedia.org/wiki/File:Meteor_Crater_-_Arizona.jpg)
+- `assets/scenes/plague.jpg`: "Pandemic masks NYC.jpg" by Shanluan, CC BY-SA 4.0 (https://commons.wikimedia.org/wiki/File:Pandemic_masks_NYC.jpg)
+- `assets/scenes/lava.jpg`: "Pāhoehoe Lava flow.JPG" by Brocken Inaglory, CC BY-SA 3.0 (https://commons.wikimedia.org/wiki/File:P%C4%81hoehoe_Lava_flow.JPG)

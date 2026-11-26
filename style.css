@@ -277,3 +277,35 @@ select {
 }
 .action-hint span { opacity: .75; font-weight: 500; margin-left: 8px; font-size: 12px; }
 @keyframes hintIn { from { opacity: 0; transform: translate(-50%, -6px); } }
+
+/* ---------- [UI] Great Reset + splash ---------- */
+.reset-btn { margin: 0 0 12px; background: linear-gradient(135deg, rgba(48,209,88,.25), rgba(10,132,255,.25)); font-weight: 700; }
+.reset-btn:hover { background: linear-gradient(135deg, rgba(48,209,88,.4), rgba(10,132,255,.4)); }
+#splash {
+  position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: radial-gradient(ellipse at 50% 45%, #0b1430 0%, #03040a 60%, #000 100%); transition: opacity .7s ease, transform .7s ease;
+}
+#splash.out { opacity: 0; transform: scale(1.06); pointer-events: none; }
+.splash-orbit { position: relative; width: 170px; height: 170px; animation: orbitIn 1.2s cubic-bezier(.2,.8,.2,1) both; }
+.splash-planet {
+  position: absolute; inset: 25px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #9fd3ff 0%, #2f7fc4 28%, #1b4f8f 55%, #071a36 80%), #0a2a55;
+  box-shadow: 0 0 40px rgba(80,160,255,.55), inset -18px -14px 30px rgba(0,0,0,.65);
+  overflow: hidden;
+}
+.splash-planet::before { content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(ellipse 30% 18% at 30% 40%, rgba(96,170,80,.9), transparent 70%), radial-gradient(ellipse 22% 30% at 62% 60%, rgba(120,160,70,.85), transparent 70%), radial-gradient(ellipse 18% 12% at 70% 28%, rgba(220,200,140,.8), transparent 70%);
+  animation: spinLand 6s linear infinite; }
+.splash-moon { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #8e8e93); top: 50%; left: 50%; margin: -8px;
+  animation: moon 2.6s linear infinite; box-shadow: 0 0 10px rgba(255,255,255,.4); }
+.splash-title { font: 700 44px/1 var(--font); letter-spacing: -0.03em; animation: fadeUp .9s .25s both; }
+.splash-title span { background: linear-gradient(90deg, #64d2ff, #0a84ff 45%, #bf5af2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.splash-sub { color: var(--text2); font-size: 15px; animation: fadeUp .9s .45s both; }
+.splash-bar { width: 180px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 8px; animation: fadeUp .9s .6s both; }
+.splash-bar i { display: block; height: 100%; width: 40%; border-radius: 4px; background: linear-gradient(90deg, #64d2ff, #0a84ff); animation: load 1.1s ease-in-out infinite; }
+@keyframes orbitIn { from { opacity: 0; transform: scale(.6) rotate(-30deg); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } }
+@keyframes spinLand { from { transform: translateX(-60%); } to { transform: translateX(60%); } }
+@keyframes moon { from { transform: rotate(0deg) translateX(84px) scale(.9); } to { transform: rotate(360deg) translateX(84px) scale(.9); } }
+@keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) { #splash * { animation: none !important; } }

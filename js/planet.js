@@ -315,7 +315,7 @@ class Planet {
             (b === B.GRASS || b === B.FOREST || b === B.SAVANNA || b === B.BEACH)) {
           c = clamp((this.cityNoise[i] - 0.68) * 5, 0, 1); // [UI] fewer, smaller settlements
         }
-        if (this.isEarth) c = s.land ? clamp(this.nightL[i] * 1.6 - 0.04, 0, 1) : 0; // [EARTH] people live where the real night lights are
+        if (this.isEarth) c = s.land ? clamp(this.nightL[i] * 2.2, 0, 1) : 0; // [EARTH] people live where the real night lights are
         city[i] = (c * 255) | 0;
         const rural = s.land && s.T >= 0 && s.T <= 32 && b !== B.DESERT && b !== B.SNOW && b !== B.ROCK ? 0.05 : 0;
         this.popD[i] = c + rural;

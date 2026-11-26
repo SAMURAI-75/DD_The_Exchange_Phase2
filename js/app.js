@@ -791,6 +791,7 @@
     world.regions.forEach((r) => { places.push(r.name); r.cities.forEach((c) => places.push(c.name)); });
     $('places').innerHTML = places.map((p) => `<option value="${esc(p)}"></option>`).join('');
     renderWars(); renderRegionCard(); renderWorldStats(); updatePlagueStatus();
+    hideSplash();
   }
 
   function renderRegionCard() {
@@ -961,6 +962,38 @@
   setInterval(updateHint, 150);
   $('searchForm').addEventListener('submit', () => showTab('R', 'place'), true);
   canvas.addEventListener('pointerup', () => { if (world.sel >= 0) showTab('R', 'place'); });
+
+  // ---------- [FEATURE] The Great Reset: everything back to normal, switches included ----------
+  function greatReset() {
+    if (life.game) life.stopGame(false);
+    stopTimelapse(); forgetWinter();
+    if (armedKey) { armedKey = null; syncDisasterUI(); }
+    if (plagueArmed) { plagueArmed = false; $('releasePlague').classList.remove('active'); $('releasePlague').textContent = '👆 Choose where it starts'; }
+    const earth = planet.isEarth;
+    setSlider(el.ocean, earth ? 71 : 60); setSlider(el.temp, 0); setSlider(el.moisture, 0); setSlider(el.rough, 50); setSlider(el.axial, 23);
+    el.melt.checked = true; el.clouds.checked = true; el.cities.checked = true; view.clouds = true; view.cities = true;
+    el.daySpeed.value = 30; el.spinSpeed.value = 25; el.strength.value = 5; chosenKey = 'asteroid'; syncDisasterUI();
+    $('pName').value = 'Crimson Flu'; $('pR0').value = 3; $('pLeth').value = 4; $('pCure').value = 5; $('pAir').checked = true; $('pLand').checked = true; $('pWater').checked = false; syncLab();
+    kind = 'Virus'; for (const c of $('pKind').children) c.classList.toggle('on', c.dataset.v === 'Virus');
+    setSpeed(0); if (state.paused) togglePause();
+    renderer.highlight = -1; [...el.legend.children].forEach((c) => c.classList.remove('on'));
+    renderer.setZoom(1); renderer.setTilt(0.35); setView('globe');
+    state.inspected = null; renderer.marker = null; el.scene.hidden = true; el.inspect.classList.add('muted'); el.inspect.textContent = 'Click the planet to inspect a spot.';
+    $('search').value = ''; $('searchMsg').textContent = '';
+    showTab('L', 'planet'); showTab('R', 'place');
+    updateLabels();
+    generate(); // rebuild the same planet fresh: no wars, plagues, disasters, warming or doom
+    flash('Everything is back to normal.');
+  }
+  $('greatReset').addEventListener('click', greatReset);
+
+  // ---------- [UI] splash screen on every load ----------
+  const splashStart = performance.now();
+  function hideSplash() {
+    const sp = $('splash'); if (!sp || sp.classList.contains('out')) return;
+    setTimeout(() => { sp.classList.add('out'); setTimeout(() => sp.remove(), 700); }, Math.max(0, 1600 - (performance.now() - splashStart)));
+  }
+  setTimeout(hideSplash, 9000); // never get stuck behind the splash
 
   // ---------- boot ----------
   updateLabels();

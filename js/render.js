@@ -159,7 +159,7 @@ class Renderer {
     const doomed = this.world && this.world.doomAmt > 0.4 && this.world.doom.type !== 'meteors';
     if (this._ti >= 0 && view.cities && !doomed) { // [EARTH] real night lights: tiny, sharp points
       const L = this._T.night[this._ti] / 255;
-      if (L > 0.12 && (P.Tmap[i] > -40)) { const n = (1 - day) * L * L * limb * 1.15; r += 255 * n; g += 196 * n; b += 120 * n; }
+      if (L > 0.04) { const n = (1 - day) * Math.min(1, L * 1.4) * limb; r += 255 * n; g += 190 * n; b += 110 * n; }
     } else if (view.cities && !doomed) {
       const c = P.city[i];
       if (c && dm < 0.5) {

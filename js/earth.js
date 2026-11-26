@@ -121,7 +121,14 @@ const EARTH = (() => {
     if (tex.ok) return Promise.resolve(tex);
     if (!tex.loading) tex.loading = Promise.all([decode(EARTH_IMG.day, tex.TW, tex.TH), decode(EARTH_IMG.night, tex.TW, tex.TH), decode(EARTH_IMG.topo, tex.TPW, tex.TPH)]).then(([d, n, t]) => {
       tex.day = d;
-      tex.night = new Uint8Array(tex.TW * tex.TH); for (let i = 0; i < tex.night.length; i++) tex.night[i] = Math.max(n[i * 4], n[i * 4 + 1], n[i * 4 + 2]);
+      tex.night = new Uint8Array(tex.TW * tex.TH);
+      // [FIX] the night image has a faint grey/blue Earth behind the lights. Keep only pixels brighter than
+      // their surroundings (local contrast), so cities glow and the dark side stays dark.
+      const W = tex.TW, H = tex.TH, v = new Float32Array(W * H), tmp = new Float32Array(W * H), bl = new Float32Array(W * H), R = 6;
+      for (let i = 0; i < v.length; i++) v[i] = Math.max(n[i * 4], n[i * 4 + 1], n[i * 4 + 2]);
+      for (let y = 0; y < H; y++) { let acc = 0; for (let x = -R; x <= R; x++) acc += v[y * W + ((x + W) % W)]; for (let x = 0; x < W; x++) { tmp[y * W + x] = acc / (2 * R + 1); acc += v[y * W + ((x + R + 1) % W)] - v[y * W + ((x - R + W) % W)]; } }
+      for (let x = 0; x < W; x++) { let acc = 0, cnt = 0; for (let y = 0; y <= R; y++) { acc += tmp[y * W + x]; cnt++; } for (let y = 0; y < H; y++) { bl[y * W + x] = acc / cnt; if (y + R + 1 < H) { acc += tmp[(y + R + 1) * W + x]; cnt++; } if (y - R >= 0) { acc -= tmp[(y - R) * W + x]; cnt--; } } }
+      for (let i = 0; i < v.length; i++) { const m = (v[i] - bl[i]) - 5 + Math.max(0, v[i] - 95); tex.night[i] = m <= 0 ? 0 : Math.min(255, m * 4); }
       tex.topo = new Uint8Array(tex.TPW * tex.TPH); for (let i = 0; i < tex.topo.length; i++) tex.topo[i] = t[i * 4];
       tex.ok = true; return tex;
     });

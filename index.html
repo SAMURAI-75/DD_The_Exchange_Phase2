@@ -4,10 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Tiny Terra — Planet Generator</title>
-<link rel="stylesheet" href="style.css?v=p2d" />
+<link rel="stylesheet" href="style.css?v=p2i" />
 </head>
 <body>
 <canvas id="space" aria-hidden="true"></canvas>
+<div id="splash" role="status" aria-label="Loading Tiny Terra">
+  <div class="splash-orbit"><div class="splash-planet"></div><div class="splash-moon"></div></div>
+  <div class="splash-title">Tiny <span>Terra</span></div>
+  <div class="splash-sub">Grow a world. Bend its climate. Watch it turn.</div>
+  <div class="splash-bar"><i></i></div>
+</div>
 <header>
   <h1>Tiny <span>Terra</span></h1>
   <p class="tag">Grow a world from a seed.</p>
@@ -16,6 +22,7 @@
 <main>
   <!-- LEFT: world controls -->
   <aside class="panel">
+    <button type="button" id="greatReset" class="wide reset-btn" title="Put everything back to normal">♻️ The Great Reset</button>
     <div class="seg tabs" role="tablist" data-tabs="L">
       <button type="button" class="on" data-tab="planet">🌍 Planet</button><button type="button" data-tab="events">💥 Events</button><button type="button" data-tab="people">👥 People</button>
     </div>
@@ -158,7 +165,7 @@
       <div id="report" class="report"></div>
     </div>
     <h2>Location</h2>
-    <canvas id="scene" class="scene" hidden width="232" height="120" aria-label="Side view of the inspected landscape"></canvas>
+    <canvas id="scene" class="scene" hidden width="464" height="240" aria-label="Side view of the inspected landscape"></canvas>
     <div id="inspect" class="inspect muted">Click the planet to inspect a spot.</div>
 
     </div>
@@ -195,17 +202,17 @@
   </aside>
 </main>
 
-<script src="js/noise.js?v=p2d"></script>
-<script src="js/earth-data.js?v=p2d"></script>
-<script src="js/earth-tex.js?v=p2d"></script>
-<script src="js/earth.js?v=p2d"></script>
-<script src="js/space.js?v=p2d"></script>
-<script src="js/planet.js?v=p2d"></script>
-<script src="js/render.js?v=p2d"></script>
-<script src="js/sound.js?v=p2d"></script>
-<script src="js/life.js?v=p2d"></script>
-<script src="js/disasters.js?v=p2d"></script>
-<script src="js/world.js?v=p2d"></script>
-<script src="js/app.js?v=p2d"></script>
+<script src="js/noise.js?v=p2i"></script>
+<script src="js/earth-data.js?v=p2i"></script>
+<script src="js/earth-tex.js?v=p2i"></script>
+<script src="js/earth.js?v=p2i"></script>
+<script src="js/space.js?v=p2i"></script>
+<script src="js/planet.js?v=p2i"></script>
+<script src="js/render.js?v=p2i"></script>
+<script src="js/sound.js?v=p2i"></script>
+<script src="js/life.js?v=p2i"></script>
+<script src="js/disasters.js?v=p2i"></script>
+<script src="js/world.js?v=p2i"></script>
+<script src="js/app.js?v=p2i"></script>
 </body>
 </html>

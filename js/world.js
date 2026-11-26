@@ -3,6 +3,18 @@
 // wars, pandemics, human impact over time, and planet-ending cataclysms.
 'use strict';
 
+// [FEATURE] real photos for events (Wikimedia Commons, freely licensed; see README credits)
+const SCENE_PHOTOS = {};
+for (const k of ['drought', 'quake', 'war', 'flood', 'fire', 'volcano', 'impact', 'plague', 'lava']) {
+  const im = new Image(); im.src = 'assets/scenes/' + k + '.jpg'; SCENE_PHOTOS[k] = im;
+}
+function drawPhoto(ctx, im, W, H) { // "cover" fit, slightly darkened at the bottom for the caption
+  const s = Math.max(W / im.naturalWidth, H / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
+  ctx.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+  const g = ctx.createLinearGradient(0, H * 0.55, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
 const STANCE_LABEL = { '-2': 'Fighting alongside', '-1': 'Backing', '0': 'Neutral', '1': 'Backing', '2': 'Fighting alongside' };
 const GOVS = ['Parliamentary republic', 'Presidential republic', 'Constitutional monarchy', 'Federation', 'One-party state', 'Military junta', 'Theocracy', 'Direct democracy'];
 const NATION_SYL = ['ar', 'bel', 'cor', 'dan', 'el', 'fen', 'gar', 'hal', 'is', 'jor', 'kal', 'lor', 'mar', 'nor', 'os', 'pel', 'quin', 'ros', 'sal', 'tor', 'ul', 'var', 'wen', 'zan'];
@@ -602,9 +614,28 @@ class World {
   }
 
   // ---------- close-up landscape decorations for whatever is happening at a spot ----------
+
   decorateScene(ctx, row, col, W, H, groundY) {
     if (!this.ready) return;
     const P = this.planet, i = row * MAP_W + col, r = this.regions[this.region[i]];
+    // pick the most important thing happening here and show a real photo of it
+    const dm0 = this.dis ? this.dis.damage[i] : 0, dt0 = this.dis ? this.dis.dtype[i] : 0, land0 = P.elev[i] >= P.seaLevel;
+    let photo = null, label = '';
+    if (this.doom && this.doomAmt > 0.3 && this.doom.type === 'collision') { photo = 'lava'; label = '🌋 Molten surface'; }
+    else if (this.doom && this.doomAmt > 0.3) photo = null;
+    else if (this.front[i] > 0.05 || (r && r.atWar.size && land0)) { photo = 'war'; label = '⚔️ War zone' + (r ? ' · ' + r.name : ''); }
+    else if (r && this.plague && r.pop > 0 && r.infected / r.pop > 0.0002 && land0) { photo = 'plague'; label = `🦠 ${this.plague.name} outbreak`; }
+    else if (dm0 > 0.1) { photo = { 1: 'impact', 2: 'quake', 3: 'flood', 4: 'volcano', 5: 'fire' }[dt0] || 'impact'; label = { 1: '☄️ Impact crater', 2: '🫨 Earthquake damage', 3: '🌊 Flooded', 4: '🌋 Eruption', 5: '🔥 Wildfire' }[dt0] || '☄️ Impact'; }
+    else if (r && land0 && r.water < 0.22) { photo = 'drought'; label = '🏜️ Drought'; }
+    const im = photo && SCENE_PHOTOS[photo];
+    if (im && im.complete && im.naturalWidth) {
+      drawPhoto(ctx, im, W, H);
+      ctx.save(); ctx.font = `600 ${Math.round(H / 11)}px -apple-system, system-ui, sans-serif`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      const w = ctx.measureText(label).width + 20, hh = Math.round(H / 7);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(10, 10, w, hh, hh / 2) : ctx.rect(10, 10, w, hh); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(label, 20, 10 + hh / 2); ctx.restore();
+      return;
+    }
     const em = (s, x, y, size = 16) => { ctx.font = `${size}px system-ui, "Apple Color Emoji", sans-serif`; ctx.fillText(s, x, y); };
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const tags = [];

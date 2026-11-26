@@ -238,8 +238,8 @@ class Life {
     for (let x = 0; x < W; x++) {
       const c = (((col + Math.round((x / W - 0.5) * span)) % MAP_W) + MAP_W) % MAP_W;
       const i = row * MAP_W + c;
-      const e = P.elev[i];
-      const y = seaY - (e - sea) * scale;
+      let e = 0; for (let k = -3; k <= 3; k++) e += P.elev[row * MAP_W + ((c + k + MAP_W) % MAP_W)]; e /= 7; // [FIX] smooth the profile
+      const y = Math.max(H * 0.18, seaY - (e - sea) * scale * (P.isEarth ? 0.55 : 1));
       ys[x] = y;
       if (e < sea) {
         ctx.fillStyle = `rgb(${th === LIFE.earth ? '30,90,160' : P.palette.shallow.join(',')})`;
