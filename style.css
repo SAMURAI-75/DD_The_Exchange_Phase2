@@ -108,3 +108,14 @@ canvas.dragging { cursor: grabbing; }
   main { grid-template-columns: 1fr; }
   .stage { order: -1; }
 }
+
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-size: 12px; }
+.legend button { display: flex; gap: 6px; align-items: center; padding: 3px 6px; background: transparent; border-color: transparent; text-align: left; font-size: 12px; }
+.legend button.on { border-color: var(--accent); background: #1a2133; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.panel h2 small { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.gallery .g { position: relative; background: #0a0e17; border: 1px solid var(--line); border-radius: 9px; padding: 4px; cursor: pointer; font-size: 10px; text-align: center; color: var(--muted); }
+.gallery .g:hover { border-color: var(--accent); }
+.gallery img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; }
+.gallery .x { position: absolute; top: 2px; right: 2px; padding: 0 5px; font-size: 11px; line-height: 16px; border-radius: 6px; }

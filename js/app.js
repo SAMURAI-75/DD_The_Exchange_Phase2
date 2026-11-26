@@ -12,7 +12,8 @@
 
   const el = {
     seed: $('seed'), seedForm: $('seedForm'), randomSeed: $('randomSeed'), seedError: $('seedError'),
-    ocean: $('ocean'), temp: $('temp'), moisture: $('moisture'), rough: $('rough'), melt: $('melt'),
+    ocean: $('ocean'), temp: $('temp'), moisture: $('moisture'), rough: $('rough'), melt: $('melt'), axial: $('axial'), tiltOut: $('tiltOut'),
+    legend: $('legend'), savePlanet: $('savePlanet'), gallery: $('gallery'),
     oceanOut: $('oceanOut'), tempOut: $('tempOut'), moistOut: $('moistOut'), roughOut: $('roughOut'),
     timelapse: $('timelapse'), presets: $('presets'),
     planetName: $('planetName'), planetClass: $('planetClass'),
@@ -53,6 +54,7 @@
     const m = Number(el.moisture.value);
     el.moistOut.textContent = (m > 0 ? '+' : '') + m + '%';
     el.roughOut.textContent = el.rough.value;
+    el.tiltOut.textContent = el.axial.value + '°';
   }
 
   function showSeedError(msg) {
@@ -163,6 +165,7 @@
     p.set('moist', el.moisture.value);
     p.set('rough', el.rough.value);
     p.set('melt', el.melt.checked ? '1' : '0');
+    p.set('tilt', el.axial.value);
     return p;
   }
 
@@ -188,7 +191,7 @@
     const seed = normaliseSeed(p.get('seed'));
     if (!seed) return null;
     const num = (k) => (p.has(k) && p.get(k).trim() !== '' && Number.isFinite(Number(p.get(k))) ? Number(p.get(k)) : undefined);
-    return { seed, ocean: num('ocean'), temp: num('temp'), moist: num('moist'), rough: num('rough'), melt: p.get('melt') };
+    return { seed, ocean: num('ocean'), temp: num('temp'), moist: num('moist'), rough: num('rough'), tilt: num('tilt'), melt: p.get('melt') };
   }
 
   function applyConfig(cfg) {
@@ -199,6 +202,7 @@
     if (cfg.temp !== undefined) setSlider(el.temp, cfg.temp);
     if (cfg.moist !== undefined) setSlider(el.moisture, cfg.moist);
     if (cfg.rough !== undefined) setSlider(el.rough, cfg.rough);
+    if (cfg.tilt !== undefined) setSlider(el.axial, cfg.tilt);
     if (cfg.melt === '0' || cfg.melt === '1') el.melt.checked = cfg.melt === '1';
     updateLabels();
     generate();
@@ -260,6 +264,7 @@
   el.temp.addEventListener('input', () => { stopTimelapse(); updateLabels(); state.needClassify = true; });
   el.melt.addEventListener('change', () => { state.needClassify = true; });
   el.rough.addEventListener('input', updateLabels);
+  el.axial.addEventListener('input', () => { updateLabels(); writeHash(); });
   el.rough.addEventListener('change', generate); // full regen only on release
 
   el.timelapse.addEventListener('click', () => (state.timelapse ? stopTimelapse() : startTimelapse()));
@@ -390,7 +395,7 @@
       if (!state.drag) view.yaw += dt * spin * 0.9;
       view.cloudShift += dt * (4 + day * 10);
       state.season += dt * day * 0.12;
-      view.sunDec = 0.41 * Math.sin(state.season);  // axial tilt -> seasons
+      view.sunDec = (Number(el.axial.value) * Math.PI / 180) * Math.sin(state.season);  // axial tilt -> seasons
       if (view.sunLon < -Math.PI * 64) view.sunLon += Math.PI * 64; // keep floats small
       if (view.cloudShift > MAP_W * 1000) view.cloudShift -= MAP_W * 1000;
     }
@@ -403,6 +408,76 @@
     if (state.inspected && now - inspectTimer > 500) { inspectTimer = now; refreshInspect(); }
     requestAnimationFrame(frame);
   }
+
+  // ---------- zoom ----------
+  canvas.addEventListener('wheel', (e) => {
+    if (renderer.mode !== 'globe') return;
+    e.preventDefault();
+    renderer.setZoom(renderer.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+  }, { passive: false });
+
+  // ---------- legend ----------
+  BIOMES.forEach((b, id) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const sw = document.createElement('i');
+    sw.style.background = `rgb(${b.color.join(',')})`;
+    btn.append(sw, document.createTextNode(b.name));
+    btn.addEventListener('click', () => {
+      renderer.highlight = renderer.highlight === id ? -1 : id;
+      [...el.legend.children].forEach((c, k) => c.classList.toggle('on', k === renderer.highlight));
+    });
+    el.legend.appendChild(btn);
+  });
+
+  // ---------- saved planets (localStorage, per browser) ----------
+  const STORE = 'tinyterra.saved.v1';
+  function loadSaved() {
+    try {
+      const v = JSON.parse(localStorage.getItem(STORE) || '[]');
+      return Array.isArray(v) ? v.filter((x) => x && typeof x.params === 'string' && typeof x.name === 'string') : [];
+    } catch (_) { return []; }
+  }
+  function storeSaved(list) {
+    try { localStorage.setItem(STORE, JSON.stringify(list)); return true; } catch (_) { return false; }
+  }
+  function renderGallery() {
+    const list = loadSaved();
+    el.gallery.textContent = '';
+    if (!list.length) { el.gallery.innerHTML = '<span class="muted" style="grid-column:1/-1;font-size:12px">No saved planets yet.</span>'; return; }
+    list.forEach((p, k) => {
+      const card = document.createElement('div');
+      card.className = 'g'; card.title = 'Load ' + p.name;
+      if (typeof p.thumb === 'string' && p.thumb.startsWith('data:image/')) {
+        const img = document.createElement('img'); img.src = p.thumb; img.alt = ''; card.appendChild(img);
+      }
+      card.appendChild(document.createTextNode(p.name)); // textContent: never markup
+      const x = document.createElement('button');
+      x.className = 'x'; x.textContent = '×'; x.title = 'Remove';
+      x.addEventListener('click', (e) => { e.stopPropagation(); const l = loadSaved(); l.splice(k, 1); storeSaved(l); renderGallery(); });
+      card.appendChild(x);
+      card.addEventListener('click', () => applyConfig(parseShare(p.params)));
+      el.gallery.appendChild(card);
+    });
+  }
+  el.savePlanet.addEventListener('click', () => {
+    if (!planet.seed) return;
+    let thumb = '';
+    try {
+      const t = document.createElement('canvas'); t.width = t.height = 96;
+      const src = renderer.mode === 'globe' ? canvas : null;
+      if (src) t.getContext('2d').drawImage(src, 0, 0, src.width, src.height, 0, 0, 96, 96);
+      else t.getContext('2d').drawImage(canvas, canvas.width / 4, 0, canvas.height, canvas.height, 0, 0, 96, 96);
+      thumb = t.toDataURL('image/jpeg', 0.7);
+    } catch (_) { /* thumbnail is optional */ }
+    const params = currentParams().toString();
+    const list = loadSaved().filter((p) => p.params !== params);
+    list.unshift({ name: planet.name(), params, thumb });
+    if (!storeSaved(list.slice(0, 12))) { flash('Saving is not available in this browser.'); return; }
+    flash('Saved “' + planet.name() + '”.');
+    renderGallery();
+  });
+  renderGallery();
 
   // ---------- boot ----------
   updateLabels();

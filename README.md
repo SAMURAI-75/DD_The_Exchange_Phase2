@@ -34,6 +34,10 @@ No install, no build, no internet, no API keys.
 - **Shareable links:** the seed and every slider value are stored in the URL. 🔗 Copy link, or paste a link or a bare seed into "Load".
 - **Presets:** Earthlike, Ice Age, Hothouse, Water World, Dune, Jungle.
 - **📸 Save PNG** of the current view.
+- **Clickable biome legend:** click a biome to highlight everywhere it occurs; other areas go grey.
+- **Scroll-wheel zoom** on the globe.
+- **Axial tilt slider (0–60°):** controls how strongly the seasons swing the day/night line.
+- **Saved planets gallery:** save favourites with thumbnails, click one to reload it, × to remove. Stored in your browser, up to 12.
 - Keyboard shortcuts: **Space** pause, **R** random, **G/M** globe or map.
 
 ## How it works

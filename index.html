@@ -40,6 +40,10 @@
       <span>Terrain roughness <output id="roughOut"></output></span>
       <input id="rough" type="range" min="0" max="100" step="1" value="50" />
     </label>
+    <label class="slider">
+      <span>Axial tilt (seasons) <output id="tiltOut"></output></span>
+      <input id="axial" type="range" min="0" max="60" step="1" value="23" />
+    </label>
     <label class="check"><input id="melt" type="checkbox" checked /> Melting ice raises sea level</label>
     <button id="timelapse" class="wide">🌡️ Play warming time-lapse</button>
 
@@ -70,13 +74,16 @@
       <label class="check"><input id="clouds" type="checkbox" checked /> Clouds</label>
       <label class="check"><input id="cities" type="checkbox" checked /> City lights</label>
     </div>
-    <p class="hint">Drag the globe to rotate · click anywhere to inspect a location</p>
+    <p class="hint">Drag to rotate · scroll to zoom · click anywhere to inspect a location</p>
   </section>
 
   <!-- RIGHT: info -->
   <aside class="panel">
     <h2>Location</h2>
     <div id="inspect" class="inspect muted">Click the planet to inspect a spot.</div>
+
+    <h2>Legend <small class="muted">click to highlight</small></h2>
+    <div id="legend" class="legend"></div>
 
     <h2>Planet census</h2>
     <div id="stats" class="stats"></div>
@@ -91,6 +98,10 @@
       <button type="submit">Load</button>
     </form>
     <p id="shareMsg" class="msg" role="status"></p>
+
+    <h2>Saved planets</h2>
+    <button id="savePlanet" class="wide">⭐ Save this planet</button>
+    <div id="gallery" class="gallery"></div>
   </aside>
 </main>
 

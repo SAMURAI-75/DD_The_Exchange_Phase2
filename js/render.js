@@ -15,6 +15,8 @@ class Renderer {
     this.tilt = 0.35;          // radians, camera tilt (drag vertically)
     this.tableTilt = null;
     this.marker = null;        // { row, col } of inspected point
+    this.zoom = 1;             // globe zoom (scroll wheel)
+    this.highlight = -1;       // biome id to highlight, -1 = none
     this._makeStars();
     this.setMode('globe');
   }
@@ -47,7 +49,7 @@ class Renderer {
   // Per-pixel lookup for the globe at the current tilt: screen pixel ->
   // latitude row + base longitude. Rebuilt only when tilt changes.
   _buildGlobeTable() {
-    const S = GLOBE_SIZE, R = S * 0.42, cx = S / 2, cy = S / 2;
+    const S = GLOBE_SIZE, R = S * 0.42 * this.zoom, cx = S / 2, cy = S / 2;
     this.R = R; this.cx = cx; this.cy = cy;
     const ct = Math.cos(this.tilt), st = Math.sin(this.tilt);
     const idx = [], row = [], lon0 = [], cosL = [], sinL = [], limb = [];
@@ -82,6 +84,11 @@ class Renderer {
       gIdx: Int32Array.from(gIdx), gA: Float32Array.from(gA),
     };
     this.tableTilt = this.tilt;
+    this.tableZoom = this.zoom;
+  }
+
+  setZoom(z) {
+    this.zoom = Math.max(0.6, Math.min(2.4, z));
   }
 
   setTilt(t) {
@@ -97,6 +104,9 @@ class Renderer {
     const direct = light > 0 ? light : 0;
     const f = (0.12 + 0.88 * day * (0.5 + 0.5 * direct)) * limb;
     let r = P.R[i] * f, g = P.G[i] * f, b = P.Bc[i] * f;
+    if (this.highlight >= 0 && P.biome[i] !== this.highlight) {
+      const gray = (r + g + b) * 0.1; r = gray; g = gray; b = gray;
+    }
 
     // warm twilight band along the terminator
     const tw = 1 - Math.abs(light - 0.02) / 0.08;
@@ -133,7 +143,7 @@ class Renderer {
   }
 
   _renderGlobe(view) {
-    if (this.tableTilt !== this.tilt) this._buildGlobeTable();
+    if (this.tableTilt !== this.tilt || this.tableZoom !== this.zoom) this._buildGlobeTable();
     const buf = this.buf;
     buf.set(this.stars);
     const t = this.gt;
@@ -180,7 +190,7 @@ class Renderer {
       if (px < 0 || py < 0 || px >= MAP_W || py >= MAP_H) return null;
       return { row: Math.floor(py), col: Math.floor(px) };
     }
-    if (this.tableTilt !== this.tilt) this._buildGlobeTable();
+    if (this.tableTilt !== this.tilt || this.tableZoom !== this.zoom) this._buildGlobeTable();
     const x = (px - this.cx) / this.R, y = -(py - this.cy) / this.R;
     const d2 = x * x + y * y;
     if (d2 > 1) return null;
