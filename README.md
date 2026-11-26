@@ -25,6 +25,10 @@ No install, no build, no internet, no API keys.
 | Hot → deserts, cold → snow | Climate is recalculated live as you drag a slider |
 
 ### Extras
+- **🎮 Creature Catcher mini-game:** fly a themed craft (✈️ plane on Earth, 🍭 lollipop plane on Candy, 🛸 UFO on Alien) with **arrow keys / WASD**, or the on-screen D-pad for touch and mouse. The planet turns beneath you. You have 60 seconds to catch creatures under your craft. Creatures on the **night side are asleep 💤 and can't be caught**, so you have to chase the daylight. Rare creatures are worth 2, ⭐ is worth 5, and your best score is saved. Press **Esc** to quit.
+- **Themed wildlife** lives on the planet, matched to each biome: whales in the ocean, camels in deserts and penguins on ice on Earth; gummy bears, unicorns and cupcakes on Candy; aliens, octopi and invaders on Alien. They doze and dim at night.
+- **Landscape preview:** clicking a spot draws a side-on scene of the terrain there, using the real elevation profile, sea level, biome colours, themed plants and creatures, and a day or night sky with the sun or moon.
+- **World themes: 🌍 Earth / 🍭 Candy / 👽 Alien.** The same terrain and climate rules, dressed as different worlds. Candy turns seas into strawberry milk, mountains into chocolate and snow into whipped cream. Alien has acid seas, fungal forests and obsidian spires. Biome names in the legend and inspector, clouds, city lights and the atmosphere glow all change with the theme. The theme is saved in share links.
 - **Warming time-lapse:** sweeps the global temperature from −25 °C to +25 °C. Ice caps retreat, deserts spread and, with "melting ice raises sea level" on, coastlines flood.
 - **City lights** glow on the night side wherever land is temperate, low and habitable.
 - **Drifting cloud layer.**
@@ -46,6 +50,7 @@ No install, no build, no internet, no API keys.
 js/noise.js    seeded PRNG (cyrb53 hash -> mulberry32) + 3D simplex noise + fBm
 js/planet.js   generate(): noise fields; classify(): climate -> biome -> colour -> stats
 js/render.js   software renderer: orthographic globe via per-pixel lookup table, map view, lighting
+js/life.js     creatures, landscape preview, Creature Catcher game
 js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 ```
 

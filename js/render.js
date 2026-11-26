@@ -116,7 +116,8 @@ class Renderer {
       const c = P.city[i];
       if (c) {
         const n = (1 - day) * (c / 255) * limb;
-        r += 255 * n; g += 196 * n; b += 110 * n;
+        const cc = this.planet.palette.city;
+        r += cc[0] * n; g += cc[1] * n; b += cc[2] * n;
       }
     }
     if (view.clouds) {
@@ -126,8 +127,8 @@ class Renderer {
       let a = (cv - 0.56) * 3.2;
       if (a > 0) {
         if (a > 0.85) a = 0.85;
-        const cl = 245 * (0.06 + 0.94 * day) * limb;
-        r = r * (1 - a) + cl * a; g = g * (1 - a) + cl * a; b = b * (1 - a) + cl * a;
+        const cl = (0.06 + 0.94 * day) * limb, ct = this.planet.palette.cloud;
+        r = r * (1 - a) + ct[0] * cl * a; g = g * (1 - a) + ct[1] * cl * a; b = b * (1 - a) + ct[2] * cl * a;
       }
     }
     r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
@@ -140,6 +141,7 @@ class Renderer {
     else this._renderMap(view);
     this.ctx.putImageData(this.image, 0, 0);
     this._drawMarker(view);
+    if (this.overlay) this.overlay(this.ctx, view);
   }
 
   _renderGlobe(view) {
@@ -149,11 +151,12 @@ class Renderer {
     const t = this.gt;
     const cosDec = Math.cos(view.sunDec), sinDec = Math.sin(view.sunDec);
 
-    // atmosphere glow
+    // atmosphere glow (tinted by world theme)
+    const gc = this.planet.palette.glow;
     for (let k = 0; k < t.gIdx.length; k++) {
       const o = t.gIdx[k], a = t.gA[k];
       const p = buf[o];
-      const r = (p & 255) * (1 - a) + 90 * a, g = ((p >> 8) & 255) * (1 - a) + 160 * a, b = ((p >> 16) & 255) * (1 - a) + 255 * a;
+      const r = (p & 255) * (1 - a) + gc[0] * a, g = ((p >> 8) & 255) * (1 - a) + gc[1] * a, b = ((p >> 16) & 255) * (1 - a) + gc[2] * a;
       buf[o] = (255 << 24) | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0);
     }
 

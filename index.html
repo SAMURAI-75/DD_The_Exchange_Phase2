@@ -23,6 +23,9 @@
     </form>
     <p id="seedError" class="error" role="alert" hidden></p>
 
+    <h2>World theme</h2>
+    <div class="seg themes" id="themes" role="tablist" aria-label="World theme"></div>
+
     <h2>Climate</h2>
     <label class="slider">
       <span>Ocean coverage <output id="oceanOut"></output></span>
@@ -66,20 +69,26 @@
     <div class="canvas-wrap">
       <canvas id="planet" aria-label="Planet view. Drag to rotate, click to inspect."></canvas>
       <div id="busy" class="busy" hidden>Generating…</div>
+      <div id="gameMsg" class="busy game-msg" hidden></div>
     </div>
     <div class="playbar">
+      <button id="play" class="play" title="Creature Catcher mini-game">🎮 Play Creature Catcher</button>
+      <div id="dpad" class="dpad" hidden>
+        <button data-k="left" aria-label="Fly west">◀</button><button data-k="up" aria-label="Fly north">▲</button><button data-k="down" aria-label="Fly south">▼</button><button data-k="right" aria-label="Fly east">▶</button>
+      </div>
       <button id="pause" title="Space">⏸ Pause</button>
       <label class="mini">Day speed <input id="daySpeed" type="range" min="0" max="100" value="30" /></label>
       <label class="mini">Spin <input id="spinSpeed" type="range" min="0" max="100" value="25" /></label>
       <label class="check"><input id="clouds" type="checkbox" checked /> Clouds</label>
       <label class="check"><input id="cities" type="checkbox" checked /> City lights</label>
     </div>
-    <p class="hint">Drag to rotate · scroll to zoom · click anywhere to inspect a location</p>
+    <p class="hint">Drag to rotate · scroll to zoom · click to inspect · 🎮 game: arrows/WASD to fly, Esc to quit</p>
   </section>
 
   <!-- RIGHT: info -->
   <aside class="panel">
     <h2>Location</h2>
+    <canvas id="scene" class="scene" hidden width="232" height="120" aria-label="Side view of the inspected landscape"></canvas>
     <div id="inspect" class="inspect muted">Click the planet to inspect a spot.</div>
 
     <h2>Legend <small class="muted">click to highlight</small></h2>
@@ -108,6 +117,7 @@
 <script src="js/noise.js"></script>
 <script src="js/planet.js"></script>
 <script src="js/render.js"></script>
+<script src="js/life.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

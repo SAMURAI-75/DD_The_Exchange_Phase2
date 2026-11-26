@@ -13,7 +13,7 @@
   const el = {
     seed: $('seed'), seedForm: $('seedForm'), randomSeed: $('randomSeed'), seedError: $('seedError'),
     ocean: $('ocean'), temp: $('temp'), moisture: $('moisture'), rough: $('rough'), melt: $('melt'), axial: $('axial'), tiltOut: $('tiltOut'),
-    legend: $('legend'), savePlanet: $('savePlanet'), gallery: $('gallery'),
+    legend: $('legend'), play: $('play'), dpad: $('dpad'), gameMsg: $('gameMsg'), scene: $('scene'), themes: $('themes'), savePlanet: $('savePlanet'), gallery: $('gallery'),
     oceanOut: $('oceanOut'), tempOut: $('tempOut'), moistOut: $('moistOut'), roughOut: $('roughOut'),
     timelapse: $('timelapse'), presets: $('presets'),
     planetName: $('planetName'), planetClass: $('planetClass'),
@@ -24,6 +24,7 @@
   };
 
   const view = { yaw: 0, sunLon: 1.2, sunDec: 0.3, cloudShift: 0, clouds: true, cities: true };
+  const life = new Life(planet, renderer, view);
   const state = {
     paused: false,
     needClassify: false,
@@ -84,6 +85,8 @@
       try {
         planet.generate(seed, rough);
         planet.classify(readClimate());
+        if (life.game) life.stopGame(false);
+        life.populate(10);
         refreshInfo();
         writeHash();
       } catch (err) {
@@ -134,6 +137,8 @@
     const p = state.inspected;
     if (!p || !planet.seed) return;
     const d = planet.describe(p.row, p.col);
+    el.scene.hidden = false;
+    life.drawScene(el.scene, p.row, p.col);
     const ns = d.lat >= 0 ? 'N' : 'S', ew = d.lon >= 0 ? 'E' : 'W';
     const alt = d.altitude >= 0 ? `${d.altitude.toLocaleString()} m` : `${(-d.altitude).toLocaleString()} m deep`;
     el.inspect.classList.remove('muted');
@@ -166,6 +171,7 @@
     p.set('rough', el.rough.value);
     p.set('melt', el.melt.checked ? '1' : '0');
     p.set('tilt', el.axial.value);
+    p.set('theme', planet.theme);
     return p;
   }
 
@@ -191,7 +197,7 @@
     const seed = normaliseSeed(p.get('seed'));
     if (!seed) return null;
     const num = (k) => (p.has(k) && p.get(k).trim() !== '' && Number.isFinite(Number(p.get(k))) ? Number(p.get(k)) : undefined);
-    return { seed, ocean: num('ocean'), temp: num('temp'), moist: num('moist'), rough: num('rough'), tilt: num('tilt'), melt: p.get('melt') };
+    return { seed, ocean: num('ocean'), temp: num('temp'), moist: num('moist'), rough: num('rough'), tilt: num('tilt'), theme: p.get('theme'), melt: p.get('melt') };
   }
 
   function applyConfig(cfg) {
@@ -203,6 +209,7 @@
     if (cfg.moist !== undefined) setSlider(el.moisture, cfg.moist);
     if (cfg.rough !== undefined) setSlider(el.rough, cfg.rough);
     if (cfg.tilt !== undefined) setSlider(el.axial, cfg.tilt);
+    if (cfg.theme && THEMES[cfg.theme]) setTheme(cfg.theme, true);
     if (cfg.melt === '0' || cfg.melt === '1') el.melt.checked = cfg.melt === '1';
     updateLabels();
     generate();
@@ -361,7 +368,52 @@
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
 
+  const KEYMAP = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyA: 'left', KeyD: 'right', KeyW: 'up', KeyS: 'down' };
   document.addEventListener('keydown', (e) => {
+    if (life.game) {
+      if (KEYMAP[e.code]) { e.preventDefault(); life.keys.add(KEYMAP[e.code]); return; }
+      if (e.code === 'Escape') { life.stopGame(false); return; }
+    }
+  }, true);
+  document.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) life.keys.delete(KEYMAP[e.code]); });
+  window.addEventListener('blur', () => life.keys.clear());
+
+  // ---------- mini-game ----------
+  let msgTimer = 0;
+  function gameMessage(html, ms) {
+    el.gameMsg.innerHTML = html; el.gameMsg.hidden = false;
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(() => { el.gameMsg.hidden = true; }, ms);
+  }
+  function setPlaying(on) {
+    el.play.textContent = on ? '⏹ Quit game' : '🎮 Play Creature Catcher';
+    el.dpad.hidden = !on;
+  }
+  el.play.addEventListener('click', () => {
+    if (life.game) { life.stopGame(false); return; }
+    if (!planet.seed) return;
+    stopTimelapse();
+    setView('globe');
+    if (state.paused) togglePause();
+    renderer.setZoom(Math.max(renderer.zoom, 1.4));
+    life.startGame();
+    setPlaying(true);
+    el.play.blur();
+    gameMessage('Fly with <b>arrows / WASD</b><br>Catch creatures in daylight ☀️<br>Sleeping ones 💤 can\'t be caught · ⭐ = 5 pts', 3500);
+  });
+  life.onGameEnd = (g, finished, newBest) => {
+    setPlaying(false);
+    life.keys.clear();
+    if (finished) gameMessage(`<b>Time!</b> Score <b>${g.score}</b> · ${g.caught} caught<br>${newBest ? '🏆 New best!' : 'Best: ' + life.best}`, 5000);
+  };
+  for (const b of el.dpad.querySelectorAll('button')) {
+    const k = b.dataset.k;
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); life.keys.add(k); });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => life.keys.delete(k));
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (life.game) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' && e.target.type === 'text') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -387,12 +439,13 @@
       if (k >= 1) stopTimelapse();
     }
     if (state.needClassify) { state.needClassify = false; reclassify(); }
+    life.update(state.paused ? 0 : dt);
 
     if (!state.paused) {
       const day = Number(el.daySpeed.value) / 100;   // 0..1
       const spin = Number(el.spinSpeed.value) / 100; // 0..1
       view.sunLon -= dt * day * 1.6;
-      if (!state.drag) view.yaw += dt * spin * 0.9;
+      if (!state.drag && !life.game) view.yaw += dt * spin * 0.9;
       view.cloudShift += dt * (4 + day * 10);
       state.season += dt * day * 0.12;
       view.sunDec = (Number(el.axial.value) * Math.PI / 180) * Math.sin(state.season);  // axial tilt -> seasons
@@ -416,19 +469,44 @@
     renderer.setZoom(renderer.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
   }, { passive: false });
 
-  // ---------- legend ----------
-  BIOMES.forEach((b, id) => {
+  // ---------- legend (rebuilt per theme) ----------
+  function buildLegend() {
+  el.legend.textContent = '';
+  const TH = planet.palette;
+  TH.names.forEach((name, id) => {
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.classList.toggle('on', id === renderer.highlight);
     const sw = document.createElement('i');
-    sw.style.background = `rgb(${b.color.join(',')})`;
-    btn.append(sw, document.createTextNode(b.name));
+    sw.style.background = `rgb(${TH.colors[id].join(',')})`;
+    btn.append(sw, document.createTextNode(name));
     btn.addEventListener('click', () => {
       renderer.highlight = renderer.highlight === id ? -1 : id;
       [...el.legend.children].forEach((c, k) => c.classList.toggle('on', k === renderer.highlight));
     });
     el.legend.appendChild(btn);
   });
+  }
+  buildLegend();
+
+  // ---------- world themes ----------
+  function setTheme(name, quiet) {
+    if (!THEMES[name]) return;
+    planet.theme = name;
+    [...el.themes.children].forEach((b) => {
+      const on = b.dataset.theme === name;
+      b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
+    });
+    buildLegend();
+    if (!quiet) { state.needClassify = true; if (planet.seed && !life.game) life.populate(10); }
+  }
+  for (const [key, t] of Object.entries(THEMES)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.theme = key; b.textContent = t.label; b.setAttribute('role', 'tab');
+    b.addEventListener('click', () => setTheme(key));
+    el.themes.appendChild(b);
+  }
+  setTheme('earth', true);
 
   // ---------- saved planets (localStorage, per browser) ----------
   const STORE = 'tinyterra.saved.v1';

@@ -33,8 +33,38 @@ const B = {
   FOREST: 7, RAINFOREST: 8, TUNDRA: 9, SNOW: 10, ROCK: 11, SAVANNA: 12,
 };
 
-const SHALLOW_RGB = [47, 127, 196];
-const DEEP_RGB = [8, 30, 72];
+// World themes: same terrain & climate rules, different "material" per biome.
+// Order of names/colors matches BIOMES ids.
+const THEMES = {
+  earth: {
+    label: '🌍 Earth',
+    names: BIOMES.map((b) => b.name), colors: BIOMES.map((b) => b.color),
+    shallow: [47, 127, 196], deep: [8, 30, 72],
+    cloud: [245, 245, 245], city: [255, 196, 110], glow: [90, 160, 255],
+  },
+  candy: {
+    label: '🍭 Candy',
+    names: ['Grape soda depths', 'Strawberry milk sea', 'Bubblegum shallows', 'Frosting floes', 'Sprinkle shore',
+      'Sugar dunes', 'Mint meadow', 'Gumdrop grove', 'Lollipop jungle', 'Marshmallow plains',
+      'Whipped-cream peaks', 'Chocolate mountains', 'Caramel fields'],
+    colors: [[110, 40, 130], [214, 96, 160], [255, 168, 210], [255, 246, 250], [255, 214, 150],
+      [255, 234, 205], [150, 238, 190], [255, 112, 160], [226, 58, 138], [246, 226, 236],
+      [255, 255, 255], [108, 58, 34], [222, 150, 70]],
+    shallow: [255, 168, 214], deep: [120, 40, 130],
+    cloud: [255, 205, 238], city: [130, 255, 248], glow: [255, 140, 210],
+  },
+  alien: {
+    label: '👽 Alien',
+    names: ['Abyssal ooze', 'Ooze sea', 'Acid shallows', 'Crystal floes', 'Glass sand',
+      'Rust flats', 'Violet moss', 'Fungal forest', 'Glowshroom jungle', 'Ash plains',
+      'Methane frost', 'Obsidian spires', 'Amber scrub'],
+    colors: [[10, 60, 60], [26, 120, 100], [70, 210, 150], [190, 255, 240], [200, 236, 255],
+      [196, 90, 58], [150, 84, 204], [108, 40, 160], [62, 22, 122], [112, 110, 132],
+      [214, 250, 255], [42, 36, 54], [232, 170, 40]],
+    shallow: [70, 214, 150], deep: [8, 52, 56],
+    cloud: [196, 255, 206], city: [120, 255, 120], glow: [120, 255, 170],
+  },
+};
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -93,7 +123,10 @@ class Planet {
     this.seaLevel = 0.5;
     this.climate = { ...DEFAULT_CLIMATE };
     this.stats = null;
+    this.theme = 'earth';
   }
+
+  get palette() { return THEMES[this.theme] || THEMES.earth; }
 
   generate(seed, roughness) {
     const s = normaliseSeed(seed);
@@ -232,6 +265,7 @@ class Planet {
 
     const st = { ocean: 0, ice: 0, desert: 0, forest: 0, grass: 0, tundra: 0, rock: 0, habitable: 0, temp: 0, total: 0, cities: 0 };
     const { R, G, Bc, biome, city, elev } = this;
+    const TH = this.palette, SHALLOW_RGB = TH.shallow, DEEP_RGB = TH.deep;
 
     for (let y = 0; y < MAP_H; y++) {
       const w = this.cosLat[y];
@@ -248,7 +282,7 @@ class Planet {
           g = SHALLOW_RGB[1] + (DEEP_RGB[1] - SHALLOW_RGB[1]) * t;
           bl = SHALLOW_RGB[2] + (DEEP_RGB[2] - SHALLOW_RGB[2]) * t;
         } else {
-          const col = BIOMES[b].color;
+          const col = TH.colors[b];
           // Hill shading from the east-west elevation gradient (wraps at the date line).
           const east = elev[y * MAP_W + ((x + 1) % MAP_W)];
           const north = elev[Math.max(0, y - 1) * MAP_W + x];
@@ -296,7 +330,7 @@ class Planet {
     const lat = this.latRad[row] * 57.29578;
     const lon = ((col + 0.5) / MAP_W - 0.5) * 360;
     return {
-      biome: BIOMES[this.biome[i]].name,
+      biome: this.palette.names[this.biome[i]],
       lat, lon,
       altitude: s.land ? Math.round(s.h * 8800) : -Math.round(s.h * 11000),
       temp: s.T,
