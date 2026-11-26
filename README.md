@@ -25,6 +25,7 @@ No install, no build, no internet, no API keys.
 | Hot → deserts, cold → snow | Climate is recalculated live as you drag a slider |
 
 ### Extras
+- **🔊 Sound effects**, synthesised live with the Web Audio API (no audio files): generate whoosh, a theme chime for each world, inspect blip, catch jingles that rise in pitch for rarer creatures, a buzz for sleeping creatures, a countdown tick in the last 5 seconds, game start and game over fanfares, a camera shutter on Save PNG, and soft UI clicks. The 🔊/🔇 button mutes them, and the setting is remembered.
 - **🎮 Creature Catcher mini-game:** fly a themed craft (✈️ plane on Earth, 🍭 lollipop plane on Candy, 🛸 UFO on Alien) with **arrow keys / WASD**, or the on-screen D-pad for touch and mouse. The planet turns beneath you. You have 60 seconds to catch creatures under your craft. Creatures on the **night side are asleep 💤 and can't be caught**, so you have to chase the daylight. Rare creatures are worth 2, ⭐ is worth 5, and your best score is saved. Press **Esc** to quit.
 - **Themed wildlife** lives on the planet, matched to each biome: whales in the ocean, camels in deserts and penguins on ice on Earth; gummy bears, unicorns and cupcakes on Candy; aliens, octopi and invaders on Alien. They doze and dim at night.
 - **Landscape preview:** clicking a spot draws a side-on scene of the terrain there, using the real elevation profile, sea level, biome colours, themed plants and creatures, and a day or night sky with the sun or moon.
@@ -50,6 +51,7 @@ No install, no build, no internet, no API keys.
 js/noise.js    seeded PRNG (cyrb53 hash -> mulberry32) + 3D simplex noise + fBm
 js/planet.js   generate(): noise fields; classify(): climate -> biome -> colour -> stats
 js/render.js   software renderer: orthographic globe via per-pixel lookup table, map view, lighting
+js/sound.js    Web Audio synthesised sound effects + mute
 js/life.js     creatures, landscape preview, Creature Catcher game
 js/app.js      UI, animation loop, inspector, presets, time-lapse, share links
 ```

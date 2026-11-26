@@ -13,7 +13,7 @@
   const el = {
     seed: $('seed'), seedForm: $('seedForm'), randomSeed: $('randomSeed'), seedError: $('seedError'),
     ocean: $('ocean'), temp: $('temp'), moisture: $('moisture'), rough: $('rough'), melt: $('melt'), axial: $('axial'), tiltOut: $('tiltOut'),
-    legend: $('legend'), play: $('play'), dpad: $('dpad'), gameMsg: $('gameMsg'), scene: $('scene'), themes: $('themes'), savePlanet: $('savePlanet'), gallery: $('gallery'),
+    legend: $('legend'), mute: $('mute'), play: $('play'), dpad: $('dpad'), gameMsg: $('gameMsg'), scene: $('scene'), themes: $('themes'), savePlanet: $('savePlanet'), gallery: $('gallery'),
     oceanOut: $('oceanOut'), tempOut: $('tempOut'), moistOut: $('moistOut'), roughOut: $('roughOut'),
     timelapse: $('timelapse'), presets: $('presets'),
     planetName: $('planetName'), planetClass: $('planetClass'),
@@ -78,6 +78,7 @@
     el.seed.value = seed;
     const rough = Number(el.rough.value) / 100;
     const token = ++state.genToken;
+    Sfx.generate();
     el.busy.hidden = false;
     // Let the "Generating…" overlay paint before the heavy loop runs.
     setTimeout(() => {
@@ -320,6 +321,7 @@
       const a = document.createElement('a');
       a.download = (planet.name() || 'planet').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.png';
       a.href = canvas.toDataURL('image/png');
+      Sfx.snapshot();
       document.body.appendChild(a); a.click(); a.remove();
     } catch (_) { flash('Could not save the image in this browser.'); }
   });
@@ -361,7 +363,7 @@
       const hit = renderer.pick(p.x, p.y, view);
       state.inspected = hit;
       renderer.marker = hit;
-      if (hit) refreshInspect();
+      if (hit) { Sfx.inspect(); refreshInspect(); }
       else { el.inspect.classList.add('muted'); el.inspect.textContent = 'That’s space. Click the planet to inspect a spot.'; }
     }
   }
@@ -397,11 +399,16 @@
     if (state.paused) togglePause();
     renderer.setZoom(Math.max(renderer.zoom, 1.4));
     life.startGame();
+    Sfx.start();
     setPlaying(true);
     el.play.blur();
     gameMessage('Fly with <b>arrows / WASD</b><br>Catch creatures in daylight ☀️<br>Sleeping ones 💤 can\'t be caught · ⭐ = 5 pts', 3500);
   });
+  life.onScore = (g) => Sfx.catch(g.lastPoints || 1);
+  life.onAsleep = () => Sfx.asleep();
+  life.onTick = () => Sfx.tick();
   life.onGameEnd = (g, finished, newBest) => {
+    if (finished) Sfx.end(newBest);
     setPlaying(false);
     life.keys.clear();
     if (finished) gameMessage(`<b>Time!</b> Score <b>${g.score}</b> · ${g.caught} caught<br>${newBest ? '🏆 New best!' : 'Best: ' + life.best}`, 5000);
@@ -498,7 +505,7 @@
       b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
     });
     buildLegend();
-    if (!quiet) { state.needClassify = true; if (planet.seed && !life.game) life.populate(10); }
+    if (!quiet) { Sfx.theme(name); state.needClassify = true; if (planet.seed && !life.game) life.populate(10); }
   }
   for (const [key, t] of Object.entries(THEMES)) {
     const b = document.createElement('button');
@@ -556,6 +563,15 @@
     renderGallery();
   });
   renderGallery();
+
+  // ---------- sound toggle + UI clicks ----------
+  const syncMute = () => { el.mute.textContent = Sfx.muted ? '🔇' : '🔊'; el.mute.setAttribute('aria-pressed', String(!Sfx.muted)); };
+  el.mute.addEventListener('click', () => { Sfx.setMuted(!Sfx.muted); syncMute(); Sfx.click(); });
+  syncMute();
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('button');
+    if (b && b !== el.mute && !b.closest('#themes') && b.id !== 'play' && b.id !== 'randomSeed') Sfx.click();
+  });
 
   // ---------- boot ----------
   updateLabels();

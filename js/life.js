@@ -143,7 +143,9 @@ class Life {
     this.view.yaw += this.vel.yaw * dt * 1.6;
     r.setTilt(r.tilt + this.vel.tilt * dt * 1.6);
 
+    const before = Math.ceil(g.time);
     g.time -= dt;
+    if (Math.ceil(g.time) < before && before <= 5 && this.onTick) this.onTick();
     // Catch creatures under the craft (screen centre), awake (daylit) only.
     for (let i = 0; i < this.creatures.length; i++) {
       const c = this.creatures[i];
@@ -152,12 +154,13 @@ class Life {
       const dx = p.x - r.cx, dy = p.y - r.cy;
       if (dx * dx + dy * dy < 30 * 30) {
         if (this.sunlight(c.row, c.col) > 0) {
-          g.score += c.points; g.caught++;
+          g.score += c.points; g.caught++; g.lastPoints = c.points;
           g.flash.push({ x: p.x, y: p.y, text: '+' + c.points, t: 0.9 });
           this.creatures[i] = this._spawn(0.12);
           if (this.onScore) this.onScore(g);
         } else if (!c.warned) {
           c.warned = true;
+          if (this.onAsleep) this.onAsleep();
           g.flash.push({ x: p.x, y: p.y, text: 'asleep 💤', t: 0.9 });
         }
       } else c.warned = false;
